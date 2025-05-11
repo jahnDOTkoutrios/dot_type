@@ -125,9 +125,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .color-buttons {
-  position: fixed;
-  top: 235px;
-  left: 20px;
+  position: static;
   display: flex;
   gap: 10px;
 }
@@ -174,6 +172,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
   align-items: center;
   gap: 8px;
   min-width: 120px;
+  width: 120px;
+  justify-content: center;
 }
 
 .control-button:hover {
@@ -183,27 +183,55 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .size-control {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
+  height: 40px;
+  margin: 0;
+  padding: 0;
 }
 
 .size-button {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 0;
+  height: 40px;
+  min-width: 40px;
+  font-size: 14px;
   background: rgba(0, 102, 255, 0.1);
   border: 1px solid rgba(0, 102, 255, 0.2);
   color: #0066ff;
-  border-radius: 4px;
   cursor: pointer;
   font-family: 'G2-Erika-Mono', monospace;
-  font-size: 14px;
   transition: all 0.3s ease;
+  border-left: none;
+  border-right: none;
 }
 
-.size-button:hover {
-  background: rgba(0, 102, 255, 0.2);
+.size-button:first-child {
+  border-radius: 4px 0 0 4px;
+  border-left: 1px solid rgba(0, 102, 255, 0.2);
+  border-right: none;
+}
+.size-button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: none;
+  border-right: 1px solid rgba(0, 102, 255, 0.2);
+}
+.size-button:nth-child(2) {
+  border-left: 1px solid rgba(0, 102, 255, 0.2);
+  border-right: 1px solid rgba(0, 102, 255, 0.2);
+}
+
+.size-button:hover, .size-button:focus {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+  z-index: 1;
+}
+
+.size-button.active, .size-button.active:hover, .size-button.active:focus {
+  background: #0066ff !important;
+  color: #fff !important;
+  border: 1.5px solid #0066ff !important;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,102,255,0.10);
 }
 
 .size-display {
@@ -217,7 +245,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   position: fixed;
   top: 20px;
   right: 20px;
-  bottom: 160px;
+  bottom: 20px;
   width: 240px;
   background: rgba(0, 102, 255, 0.05);
   border: 1px solid rgba(0, 102, 255, 0.2);
@@ -227,6 +255,13 @@ input[type="range"]::-webkit-slider-thumb:hover {
   color: #0066ff;
   padding: 15px;
   overflow-y: auto;
+  box-sizing: border-box;
+  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+
+.console-panel::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
 }
 
 .console-panel h3 {
@@ -270,15 +305,17 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .export-buttons {
   position: fixed;
   bottom: 20px;
-  right: 20px;
-  width: 270px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 15px;
 }
 
 .export-button {
-  width: 100%;
+  width: 120px;
   background: #0066ff;
   border: none;
   color: white;
@@ -298,14 +335,54 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .shortcuts-info {
+  display: none;
   position: fixed;
-  bottom: 20px;
+  bottom: 70px;
   left: 20px;
+  z-index: 30;
   font-family: 'G2-Erika-Mono', monospace;
   font-size: 14px;
   color: #0066ff;
   padding: 0;
   line-height: 2.2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.show-shortcuts {
+  display: block !important;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.help-button {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 20;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid #0066ff;
+  color: #0066ff;
+  font-family: 'G2-Erika-Mono', monospace;
+  font-size: 22px;
+  font-weight: normal;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: background 0.2s, bottom 0.3s;
+}
+
+.help-button:hover, .help-button:focus {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+  box-shadow: 0 4px 12px rgba(0,102,255,0.12);
 }
 
 .shortcuts-info h3 {
@@ -316,9 +393,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .shortcuts-info div {
+  display: flex;
+  align-items: center;
   margin-bottom: 4px;
-  font-family: 'G2-Erika-Mono', monospace;
-  font-size: 14px;
 }
 
 .shortcuts-info span.key {
@@ -330,4 +407,185 @@ input[type="range"]::-webkit-slider-thumb:hover {
   margin-right: 8px;
   border: 1px solid rgba(0, 102, 255, 0.2);
   text-transform: uppercase;
+  min-width: 48px;
+  text-align: center;
+  display: inline-block;
+}
+
+.grid-toggle-button {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font-family: 'G2-Erika-Mono', monospace;
+  font-size: 14px;
+  background: rgba(0, 102, 255, 0.1);
+  border: 1px solid rgba(0, 102, 255, 0.2);
+  color: #0066ff;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-toggle-button:hover {
+  background: rgba(0, 102, 255, 0.2);
+}
+
+.action-control {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 40px;
+  width: 120px;
+  margin: 0;
+  padding: 0;
+}
+
+.action-button {
+  border-radius: 0;
+  height: 40px;
+  min-width: 40px;
+  font-size: 14px;
+  background: rgba(0, 102, 255, 0.1);
+  border: 1px solid rgba(0, 102, 255, 0.2);
+  color: #0066ff;
+  cursor: pointer;
+  font-family: 'G2-Erika-Mono', monospace;
+  transition: all 0.3s ease;
+  border-left: none;
+  border-right: none;
+}
+
+.action-button:first-child {
+  border-radius: 4px 0 0 4px;
+  border-left: 1px solid rgba(0, 102, 255, 0.2);
+  border-right: none;
+}
+.action-button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: none;
+  border-right: 1px solid rgba(0, 102, 255, 0.2);
+}
+.action-button:nth-child(2) {
+  border-left: 1px solid rgba(0, 102, 255, 0.2);
+  border-right: 1px solid rgba(0, 102, 255, 0.2);
+}
+
+.action-button:hover, .action-button:focus {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+  z-index: 1;
+}
+
+.style-control {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+}
+
+.style-button {
+  width: 60px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(0, 102, 255, 0.2);
+  background: rgba(0, 102, 255, 0.1);
+  color: #0066ff;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 40px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.style-button:first-child {
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+}
+
+.style-button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: none;
+}
+
+.style-button:hover, .style-button:focus {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+  z-index: 1;
+}
+
+.style-button.active, .style-button.active:hover, .style-button.active:focus {
+  background: #0066ff !important;
+  color: #fff !important;
+  border: 1.5px solid #0066ff !important;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,102,255,0.10);
+}
+
+/* Add dark mode styles */
+body.dark-mode {
+  background: #1a1a1a;
+}
+
+body.dark-mode .control-button,
+body.dark-mode .action-button,
+body.dark-mode .size-button,
+body.dark-mode .style-button {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.dark-mode .control-button:hover,
+body.dark-mode .action-button:hover,
+body.dark-mode .size-button:hover,
+body.dark-mode .style-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode .control-button.active,
+body.dark-mode .action-button.active,
+body.dark-mode .size-button.active,
+body.dark-mode .style-button.active {
+  background: #fff !important;
+  color: #1a1a1a !important;
+  border-color: #fff !important;
+}
+
+body.dark-mode .console-panel {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.dark-mode .connection-info {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .help-button {
+  background: #1a1a1a;
+  border-color: #fff;
+  color: #fff;
+}
+
+body.dark-mode .help-button:hover {
+  background: #fff;
+  color: #1a1a1a;
+}
+
+body.dark-mode .shortcuts-info {
+  color: #fff;
+}
+
+body.dark-mode .shortcuts-info .key {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
