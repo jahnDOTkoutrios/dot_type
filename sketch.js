@@ -163,6 +163,236 @@ function exportZipWithSVGAndLog() {
   });
 }
 
+function exportAsOTF() {
+  // Create an array to store all glyphs
+  let glyphs = [];
+
+  // Convert each letter's dots to a path
+  Object.entries(letterDrawings).forEach(([letter, state]) => {
+    if (state.placedDots.some((connection) => connection.length > 0)) {
+      // Save current state
+      let currentState = {
+        placedDots: JSON.parse(JSON.stringify(placedDots)),
+        connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+        connectionDotStyles: [...connectionDotStyles],
+        currentConnectionIndex: currentConnectionIndex,
+      };
+
+      // Load letter state
+      placedDots = JSON.parse(JSON.stringify(state.placedDots));
+      connectionColors = JSON.parse(JSON.stringify(state.connectionColors));
+      connectionDotStyles = [...state.connectionDotStyles];
+      currentConnectionIndex = 0;
+
+      // Create path for this letter
+      let path = new opentype.Path();
+
+      // Convert dots and their connections to paths
+      placedDots.forEach((connection) => {
+        // Draw connections between dots
+        for (let i = 0; i < connection.length - 1; i++) {
+          let d1 = connection[i];
+          let d2 = connection[i + 1];
+
+          // Convert coordinates to font space (0-1000)
+          let x1 = map(d1.x, padding, width - padding, 100, 900);
+          let y1 = map(d1.y, padding, height - padding, 100, 900);
+          let x2 = map(d2.x, padding, width - padding, 100, 900);
+          let y2 = map(d2.y, padding, height - padding, 100, 900);
+
+          let r1 = map(d1.size * cellSize, 0, cellSize * 2, 20, 100);
+          let r2 = map(d2.size * cellSize, 0, cellSize * 2, 20, 100);
+
+          // Ensure r1 is the larger radius
+          let swap = false;
+          if (r2 > r1) {
+            [r1, r2] = [r2, r1];
+            [x1, x2] = [x2, x1];
+            [y1, y2] = [y2, y1];
+            swap = true;
+          }
+
+          // Calculate the distance between centers
+          let dx = x2 - x1;
+          let dy = y2 - y1;
+          let distance = Math.sqrt(dx * dx + dy * dy);
+
+          // Calculate the angle between centers
+          let angle = Math.atan2(dy, dx);
+
+          // Calculate the angle of the tangent line
+          let tangentAngle = Math.acos((r1 - r2) / distance);
+
+          // Calculate the two tangent angles
+          let angle1 = angle + tangentAngle;
+          let angle2 = angle - tangentAngle;
+
+          // Calculate the tangent points on the larger circle
+          let x1a = x1 + r1 * Math.cos(angle1);
+          let y1a = y1 + r1 * Math.sin(angle1);
+          let x1b = x1 + r1 * Math.cos(angle2);
+          let y1b = y1 + r1 * Math.sin(angle2);
+
+          // Calculate the tangent points on the smaller circle
+          let x2a = x2 + r2 * Math.cos(angle1);
+          let y2a = y2 + r2 * Math.sin(angle1);
+          let x2b = x2 + r2 * Math.cos(angle2);
+          let y2b = y2 + r2 * Math.sin(angle2);
+
+          // Swap points if we swapped the circles
+          if (swap) {
+            [x1a, x2a] = [x2a, x1a];
+            [y1a, y2a] = [y2a, y1a];
+            [x1b, x2b] = [x2b, x1b];
+            [y1b, y2b] = [y2b, y1b];
+          }
+
+          // Draw the connection shape clockwise
+          path.moveTo(x1a, y1a);
+          path.lineTo(x2a, y2a);
+          path.lineTo(x2b, y2b);
+          path.lineTo(x1b, y1b);
+          path.closePath();
+        }
+
+        // Draw the dots
+        connection.forEach((dot) => {
+          // Convert coordinates to font space (0-1000)
+          let x = map(dot.x, padding, width - padding, 100, 900);
+          let y = map(dot.y, padding, height - padding, 100, 900);
+          let radius = map(dot.size * cellSize, 0, cellSize * 2, 20, 100);
+
+          // Create circle using Bézier curves
+          // The magic number 0.552284749831 is used to create a perfect circle with Bézier curves
+          const c = 0.552284749831;
+
+          // Draw outer circle clockwise
+          path.moveTo(x + radius, y);
+          path.bezierCurveTo(
+            x + radius,
+            y + radius * c,
+            x + radius * c,
+            y + radius,
+            x,
+            y + radius
+          );
+          path.bezierCurveTo(
+            x - radius * c,
+            y + radius,
+            x - radius,
+            y + radius * c,
+            x - radius,
+            y
+          );
+          path.bezierCurveTo(
+            x - radius,
+            y - radius * c,
+            x - radius * c,
+            y - radius,
+            x,
+            y - radius
+          );
+          path.bezierCurveTo(
+            x + radius * c,
+            y - radius,
+            x + radius,
+            y - radius * c,
+            x + radius,
+            y
+          );
+          path.closePath();
+
+          // Draw inner circle counter-clockwise
+          let innerRadius = radius * 0.6; // Inner circle is 60% of outer circle
+          path.moveTo(x + innerRadius, y);
+          path.bezierCurveTo(
+            x + innerRadius,
+            y - innerRadius * c,
+            x + innerRadius * c,
+            y - innerRadius,
+            x,
+            y - innerRadius
+          );
+          path.bezierCurveTo(
+            x - innerRadius * c,
+            y - innerRadius,
+            x - innerRadius,
+            y - innerRadius * c,
+            x - innerRadius,
+            y
+          );
+          path.bezierCurveTo(
+            x - innerRadius,
+            y + innerRadius * c,
+            x - innerRadius * c,
+            y + innerRadius,
+            x,
+            y + innerRadius
+          );
+          path.bezierCurveTo(
+            x + innerRadius * c,
+            y + innerRadius,
+            x + innerRadius,
+            y + innerRadius * c,
+            x + innerRadius,
+            y
+          );
+          path.closePath();
+        });
+      });
+
+      // Create the glyph
+      let glyph = new opentype.Glyph({
+        name: letter,
+        unicode: letter.charCodeAt(0),
+        advanceWidth: 1000,
+        path: path,
+      });
+
+      glyphs.push(glyph);
+
+      // Restore previous state
+      placedDots = currentState.placedDots;
+      connectionColors = currentState.connectionColors;
+      connectionDotStyles = currentState.connectionDotStyles;
+      currentConnectionIndex = currentState.currentConnectionIndex;
+    }
+  });
+
+  // Create the font with all glyphs at once
+  let font = new opentype.Font({
+    familyName: "DotType",
+    styleName: "Regular",
+    unitsPerEm: 1000,
+    ascender: 800,
+    descender: -200,
+    glyphs: glyphs,
+  });
+
+  // Generate and download the font
+  let timestamp =
+    year() +
+    "-" +
+    month() +
+    "-" +
+    day() +
+    "_" +
+    hour() +
+    "-" +
+    minute() +
+    "-" +
+    second();
+  let fontBlob = font.toArrayBuffer();
+  let url = URL.createObjectURL(new Blob([fontBlob], { type: "font/otf" }));
+  let link = document.createElement("a");
+  link.href = url;
+  link.download = `dot_type_${timestamp}.otf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function generateLogContent(letter) {
   let sizeLabels = ["S", "M", "L"];
   let content = `Dot Connections Log for Letter ${letter}\n`;
@@ -375,6 +605,47 @@ function setup() {
 
   controlButtonsContainer.child(colorButtonsContainer);
 
+  // S/M/L size buttons in a wrapper with width 120px
+  let sizeControl = createDiv("");
+  sizeControl.class("size-control");
+  sizeControl.style("width", "120px");
+  const sizeLabels = ["S", "M", "L"];
+  sizeButtons = [];
+  sizeLabels.forEach((label, idx) => {
+    let btn = createButton(label);
+    btn.class("size-button");
+    btn.mousePressed(() => {
+      dotSize = DOT_SIZES[idx];
+      updateSizeDisplay();
+    });
+    sizeButtons.push(btn);
+    sizeControl.child(btn);
+  });
+  // Set initial active button
+  sizeButtons[getDotSizeIndex(dotSize)]?.addClass("active");
+  controlButtonsContainer.child(sizeControl);
+
+  // Style buttons (Outlined, Filled) in a wrapper with width 120px
+  let styleControl = createDiv("");
+  styleControl.class("style-control");
+  styleControl.style("width", "120px");
+  const styleLabels = ["○", "●"];
+  styleButtons = [];
+  styleLabels.forEach((label, idx) => {
+    let btn = createButton(label);
+    btn.class("style-button");
+    btn.mousePressed(() => {
+      nextDotStyle = ["outlined", "filled"][idx];
+      updateStyleDisplay();
+      saveCurrentLetterState(); // Save state after style change
+    });
+    styleButtons.push(btn);
+    styleControl.child(btn);
+  });
+  // Set initial active button
+  styleButtons[0].addClass("active");
+  controlButtonsContainer.child(styleControl);
+
   // Action buttons (New, Undo, Clear) in a wrapper with width 120px
   let actionControl = createDiv("");
   actionControl.class("action-control");
@@ -427,52 +698,6 @@ function setup() {
 
   controlButtonsContainer.child(actionControl);
 
-  // S/M/L size buttons in a wrapper with width 120px
-  let sizeControl = createDiv("");
-  sizeControl.class("size-control");
-  sizeControl.style("width", "120px");
-  const sizeLabels = ["S", "M", "L"];
-  sizeButtons = [];
-  sizeLabels.forEach((label, idx) => {
-    let btn = createButton(label);
-    btn.class("size-button");
-    btn.mousePressed(() => {
-      dotSize = DOT_SIZES[idx];
-      updateSizeDisplay();
-    });
-    sizeButtons.push(btn);
-    sizeControl.child(btn);
-  });
-  // Set initial active button
-  sizeButtons[getDotSizeIndex(dotSize)]?.addClass("active");
-  controlButtonsContainer.child(sizeControl);
-
-  // Style buttons (Outlined, Filled) in a wrapper with width 120px
-  let styleControl = createDiv("");
-  styleControl.class("style-control");
-  styleControl.style("width", "120px");
-  const styleLabels = ["○", "●"];
-  styleButtons = [];
-  styleLabels.forEach((label, idx) => {
-    let btn = createButton(label);
-    btn.class("style-button");
-    btn.mousePressed(() => {
-      nextDotStyle = ["outlined", "filled"][idx];
-      updateStyleDisplay();
-      saveCurrentLetterState(); // Save state after style change
-    });
-    styleButtons.push(btn);
-    styleControl.child(btn);
-  });
-  // Set initial active button
-  styleButtons[0].addClass("active");
-  controlButtonsContainer.child(styleControl);
-
-  // Size display (optional, can be removed if not needed)
-  // sizeDisplay = createSpan(dotSize.toString());
-  // sizeDisplay.class("size-display");
-  // sizeControl.child(sizeDisplay);
-
   // Create export buttons container
   let exportButtons = createDiv("");
   exportButtons.class("export-buttons");
@@ -483,9 +708,39 @@ function setup() {
   exportComboButton.mousePressed(exportZipWithSVGAndLog);
   exportButtons.child(exportComboButton);
 
+  // Create OTF export button
+  // let exportOTFButton = createButton("EXPORT OTF");
+  // exportOTFButton.class("control-button");
+  // exportOTFButton.mousePressed(exportAsOTF);
+  // exportButtons.child(exportOTFButton);
+
   // Create letter selector container
   let letterSelector = createDiv("");
   letterSelector.class("letter-selector");
+
+  // Create text input for preview
+  let textInput = createInput("");
+  textInput.class("text-preview");
+  textInput.attribute("placeholder", "Type...");
+  textInput.input(() => {
+    previewText = textInput.value().toUpperCase();
+    textInput.value(textInput.value().toUpperCase()); // Force uppercase in input
+  });
+
+  // Add event listeners for focus/blur
+  textInput.elt.addEventListener("focus", () => {
+    isTextInputFocused = true;
+  });
+  textInput.elt.addEventListener("blur", () => {
+    isTextInputFocused = false;
+  });
+
+  // Prevent key events from bubbling up when input is focused
+  textInput.elt.addEventListener("keydown", (e) => {
+    if (isTextInputFocused) {
+      e.stopPropagation();
+    }
+  });
 
   // Create ABC toggle button
   let abcButton = createButton("ABC ↓");
@@ -570,34 +825,10 @@ function setup() {
     letterSelector.child(btn);
   });
 
-  // Create text input for preview
-  let textInput = createInput("");
-  textInput.class("text-preview");
-  textInput.attribute("placeholder", "Type...");
-  textInput.input(() => {
-    previewText = textInput.value().toUpperCase();
-    textInput.value(textInput.value().toUpperCase()); // Force uppercase in input
-  });
-
-  // Add event listeners for focus/blur
-  textInput.elt.addEventListener("focus", () => {
-    isTextInputFocused = true;
-  });
-  textInput.elt.addEventListener("blur", () => {
-    isTextInputFocused = false;
-  });
-
-  // Prevent key events from bubbling up when input is focused
-  textInput.elt.addEventListener("keydown", (e) => {
-    if (isTextInputFocused) {
-      e.stopPropagation();
-    }
-  });
-
   // Add both to the control buttons container
   controlButtonsContainer.child(abcButton);
+  controlButtonsContainer.child(textInput); // Add text input before letter selector
   controlButtonsContainer.child(letterSelector);
-  controlButtonsContainer.child(textInput);
 
   // Initialize letter drawings
   initializeLetterDrawings();
@@ -658,7 +889,7 @@ function draw() {
               for (let k = 0; k < connection.length - 1; k++) {
                 let d1 = connection[k];
                 let d2 = connection[k + 1];
-                drawTangentLines(d1, d2, connectionColors[j]);
+                drawTangentLines(d1, d2, state.connectionColors[j]);
               }
               // Draw dots
               for (let dot of connection) {
@@ -666,8 +897,8 @@ function draw() {
                   dot.x,
                   dot.y,
                   dot.size,
-                  connectionColors[j],
-                  dot.style || connectionDotStyles[j]
+                  state.connectionColors[j],
+                  dot.style || state.connectionDotStyles[j]
                 );
               }
             }
@@ -776,16 +1007,16 @@ function drawTangentLines(d1, d2, color) {
   let angle2 = angle - tangentAngle;
 
   // Calculate the tangent points on the larger circle
-  let x1a = x1 + r1 * cos(angle1);
-  let y1a = y1 + r1 * sin(angle1);
-  let x1b = x1 + r1 * cos(angle2);
-  let y1b = y1 + r1 * sin(angle2);
+  let x1a = x1 + r1 * Math.cos(angle1);
+  let y1a = y1 + r1 * Math.sin(angle1);
+  let x1b = x1 + r1 * Math.cos(angle2);
+  let y1b = y1 + r1 * Math.sin(angle2);
 
   // Calculate the tangent points on the smaller circle
-  let x2a = x2 + r2 * cos(angle1);
-  let y2a = y2 + r2 * sin(angle1);
-  let x2b = x2 + r2 * cos(angle2);
-  let y2b = y2 + r2 * sin(angle2);
+  let x2a = x2 + r2 * Math.cos(angle1);
+  let y2a = y2 + r2 * Math.sin(angle1);
+  let x2b = x2 + r2 * Math.cos(angle2);
+  let y2b = y2 + r2 * Math.sin(angle2);
 
   // Swap points if we swapped the circles
   if (swap) {
@@ -1422,6 +1653,30 @@ function loadLetterState(letter) {
   connectionColors = JSON.parse(JSON.stringify(state.connectionColors));
   connectionDotStyles = [...state.connectionDotStyles];
   currentConnectionIndex = 0;
+
+  // Update current color to match the first connection's color if it exists
+  if (connectionColors.length > 0 && connectionColors[0].length > 0) {
+    currentColor = [...connectionColors[0]];
+    // Update color button states
+    Object.entries(COLORS).forEach(([name, color]) => {
+      if (arraysEqual(color, currentColor)) {
+        colorButtons[name].addClass("active");
+      } else {
+        colorButtons[name].removeClass("active");
+      }
+    });
+  } else {
+    // If no connections exist, set to default blue
+    currentColor = [...COLORS.blue];
+    // Update color button states
+    Object.entries(COLORS).forEach(([name, color]) => {
+      if (name === "blue") {
+        colorButtons[name].addClass("active");
+      } else {
+        colorButtons[name].removeClass("active");
+      }
+    });
+  }
 }
 
 function hasLetterDrawing(letter) {

@@ -741,7 +741,7 @@ body.dark-mode .text-preview:focus {
   font-family: 'G2-Erika-Mono', monospace;
   font-size: 14px;
   padding: 0 8px;
-  margin-bottom: 8px;
+  margin: 0;
   box-sizing: border-box;
   text-transform: uppercase;
   opacity: 0;

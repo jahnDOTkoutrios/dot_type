@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pixel Font Creator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/opentype.js/dist/opentype.min.js"></script>
+  <style>
+    body {
+      font-family: 'Helvetica', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #f7f7f7;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin-bottom: 20px;
+    }
+    #char-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+    .char-button {
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #ccc;
+      cursor: pointer;
+      background-color: #fff;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .char-button:hover {
+      border-color: #000;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+    .char-button.active {
+      border: 2px solid #000;
+      background-color: #f0f0f0;
+    }
+    .char-preview {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .char-preview .letter {
+      font-family: 'Helvetica', sans-serif;
+      font-size: 24px;
+      position: absolute;
+      z-index: 1;
+    }
+    .char-preview .design {
+      position: absolute;
+      z-index: 2;
+    }
+    #export-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      font-family: 'Helvetica', sans-serif;
+      border: none;
+      background-color: #000;
+      color: #fff;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    #export-btn:hover {
+      background-color: #333;
+    }
+    #typing-field {
+      margin-top: 20px;
+      padding: 10px;
+      font-size: 16px;
+      width: 300px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    #preview-text {
+      margin-top: 20px;
+      font-size: 24px;
+      display: flex;
+      gap: 5px;
+    }
+    .preview-glyph {
+      display: inline-block;
+      width: 30px;
+      height: 30px;
+      position: relative;
+    }
+    .preview-glyph .design {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .grid-controls {
+      margin: 20px 0;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .grid-controls input {
+      width: 60px;
+      padding: 5px;
+    }
+    .warning {
+      color: #ff4444;
+      font-size: 0.9em;
+      margin-top: 5px;
+    }
+    .control-group {
+      margin: 10px 0;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+    .control-label {
+      font-weight: bold;
+      margin-right: 5px;
+    }
+    .shape-selector {
+      padding: 5px 10px;
+      border: 1px solid #ccc;
+      background-color: white;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .shape-selector.active {
+      background-color: #000;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-controls">
+    <div class="control-label">Width:</div>
+    <input type="number" id="grid-cols" value="7" min="1" max="15" placeholder="Width">
+    <div class="control-label">Height:</div>
+    <input type="number" id="grid-rows" value="5" min="1" max="15" placeholder="Height">
+    <button id="apply-grid">Apply Grid</button>
+  </div>
+  <div class="warning">Warning: Changing grid size will reset all characters!</div>
+  
+  <div class="control-group">
+    <div class="control-label">Pixel Shape:</div>
+    <button class="shape-selector active" data-shape="square">Square</button>
+    <button class="shape-selector" data-shape="dot">Dot</button>
+    <button class="shape-selector" data-shape="plus">Plus</button>
+    <button class="shape-selector" data-shape="triangle">Triangle</button>
+  </div>
+  
+  <div id="canvas-container"></div>
+  <div id="char-buttons"></div>
+  <button id="export-btn">Export as OTF</button>
+  <input type="text" id="typing-field" placeholder="Type here...">
+  <div id="preview-text"></div>
+  <script>
+    let gridSizeX = 7;
+    let gridSizeY = 5;
+    let cellSize = 50;
+    let currentChar = 'A';
+    let characters = {};
+    let isDragging = false;
+    let currentAction = null; // 'draw' or 'erase'
+    let pixelShape = 'square'; // Default shape
+    
+    function setup() {
+      initializeGrid();
+    }
+
+    function draw() {
+      // This is needed for p5.js to work properly
+    }
+
+    function initializeGrid() {
+      // Remove existing canvas if it exists
+      if (document.querySelector('canvas')) {
+        document.querySelector('canvas').remove();
+      }
+
+      let canvas = createCanvas(gridSizeX * cellSize, gridSizeY * cellSize);
+      canvas.parent('canvas-container');
+      background(255);
+
+      // Reinitialize characters with new grid size
+      characters = {};
+      for (let i = 65; i <= 90; i++) {
+        let char = String.fromCharCode(i);
+        characters[char] = Array(gridSizeY).fill().map(() => Array(gridSizeX).fill(0));
+      }
+
+      // Draw the grid
+      drawGrid();
+
+      // Create buttons for A-Z
+      const charButtons = document.getElementById('char-buttons');
+      charButtons.innerHTML = ''; // Clear existing buttons
+      for (let i = 65; i <= 90; i++) {
+        let char = String.fromCharCode(i);
+        let button = document.createElement('div');
+        button.className = 'char-button';
+        button.addEventListener('click', () => {
+          currentChar = char;
+          drawGrid();
+          updateActiveButton();
+        });
+
+        // Add preview container
+        let preview = document.createElement('div');
+        preview.className = 'char-preview';
+        button.appendChild(preview);
+
+        charButtons.appendChild(button);
+      }
+
+      // Highlight the active button
+      updateActiveButton();
+      updatePreviews();
+    }
+
+    function drawGrid() {
+      background(255);
+      stroke(200);
+      for (let i = 0; i <= gridSizeX; i++) {
+        line(i * cellSize, 0, i * cellSize, height);
+      }
+      for (let i = 0; i <= gridSizeY; i++) {
+        line(0, i * cellSize, width, i * cellSize);
+      }
+
+      // Draw the current character's pixels
+      let grid = characters[currentChar];
+      for (let i = 0; i < gridSizeY; i++) {
+        for (let j = 0; j < gridSizeX; j++) {
+          if (grid[i][j] === 1) {
+            fill(0);
+            noStroke();
+            drawPixelShape(j * cellSize, i * cellSize, cellSize);
+          }
+        }
+      }
+
+      // Update previews for all characters
+      updatePreviews();
+    }
+    
+    function drawPixelShape(x, y, size) {
+      switch (pixelShape) {
+        case 'square':
+          rect(x, y, size, size);
+          break;
+        case 'dot':
+          ellipse(x + size/2, y + size/2, size * 0.8, size * 0.8);
+          break;
+        case 'plus':
+          rect(x + size/3, y, size/3, size);
+          rect(x, y + size/3, size, size/3);
+          break;
+        case 'triangle':
+          triangle(x, y + size, x + size/2, y, x + size, y + size);
+          break;
+      }
+    }
+
+    function mousePressed() {
+      let x = floor(mouseX / cellSize);
+      let y = floor(mouseY / cellSize);
+      if (x >= 0 && x < gridSizeX && y >= 0 && y < gridSizeY) {
+        isDragging = true;
+        // Determine if we're drawing or erasing based on current cell state
+        currentAction = characters[currentChar][y][x] === 1 ? 'erase' : 'draw';
+        toggleCell(x, y);
+      }
+    }
+    
+    function mouseDragged() {
+      if (isDragging) {
+        let x = floor(mouseX / cellSize);
+        let y = floor(mouseY / cellSize);
+        if (x >= 0 && x < gridSizeX && y >= 0 && y < gridSizeY) {
+          // Set cell based on current action (draw or erase)
+          if (currentAction === 'draw') {
+            characters[currentChar][y][x] = 1;
+          } else {
+            characters[currentChar][y][x] = 0;
+          }
+          drawGrid();
+          updateTextPreview(document.getElementById('typing-field').value.toUpperCase());
+        }
+      }
+    }
+    
+    function mouseReleased() {
+      isDragging = false;
+      currentAction = null;
+    }
+    
+    function toggleCell(x, y) {
+      characters[currentChar][y][x] = characters[currentChar][y][x] === 1 ? 0 : 1;
+      drawGrid();
+      updateTextPreview(document.getElementById('typing-field').value.toUpperCase());
+    }
+
+    function createFontFile() {
+      const notdefGlyph = new opentype.Glyph({
+        name: ".notdef",
+        advanceWidth: (gridSizeX + 1) * 100, // Width of grid plus 1 cell for sidebearing
+        path: new opentype.Path(),
+      });
+
+      const glyphs = [notdefGlyph];
+      for (let char in characters) {
+        let path = new opentype.Path();
+        let grid = characters[char];
+        
+        // Calculate sidebearing (half a cell on each side)
+        const sidebearing = 50; // Half a cell width
+        
+        for (let i = 0; i < gridSizeY; i++) {
+          for (let j = 0; j < gridSizeX; j++) {
+            if (grid[i][j] === 1) {
+              // Fix flipped coordinates by inverting Y-axis and add sidebearing
+              const x = j * 100 + sidebearing;
+              const y = (gridSizeY - 1 - i) * 100; // Invert Y coordinate
+              
+              // Draw shapes based on selected pixel shape
+              if (pixelShape === 'square') {
+                path.moveTo(x, y);
+                path.lineTo(x + 100, y);
+                path.lineTo(x + 100, y + 100);
+                path.lineTo(x, y + 100);
+                path.close();
+              } else if (pixelShape === 'dot') {
+                // Create circle approximation with bezier curves
+                const radius = 40;
+                const cx = x + 50;
+                const cy = y + 50;
+                path.moveTo(cx + radius, cy);
+                path.bezierCurveTo(cx + radius, cy + radius * 0.55, cx + radius * 0.55, cy + radius, cx, cy + radius);
+                path.bezierCurveTo(cx - radius * 0.55, cy + radius, cx - radius, cy + radius * 0.55, cx - radius, cy);
+                path.bezierCurveTo(cx - radius, cy - radius * 0.55, cx - radius * 0.55, cy - radius, cx, cy - radius);
+                path.bezierCurveTo(cx + radius * 0.55, cy - radius, cx + radius, cy - radius * 0.55, cx + radius, cy);
+                path.close();
+              } else if (pixelShape === 'plus') {
+                // Horizontal bar
+                path.moveTo(x, y + 40);
+                path.lineTo(x + 100, y + 40);
+                path.lineTo(x + 100, y + 60);
+                path.lineTo(x, y + 60);
+                path.close();
+                
+                // Vertical bar
+                path.moveTo(x + 40, y);
+                path.lineTo(x + 60, y);
+                path.lineTo(x + 60, y + 100);
+                path.lineTo(x + 40, y + 100);
+                path.close();
+              } else if (pixelShape === 'triangle') {
+                path.moveTo(x, y);
+                path.lineTo(x + 100, y);
+                path.lineTo(x + 50, y + 100);
+                path.close();
+              }
+            }
+          }
+        }
+
+        const glyph = new opentype.Glyph({
+          name: char,
+          unicode: char.charCodeAt(0),
+          advanceWidth: (gridSizeX + 1) * 100, // Width of grid plus 1 cell for sidebearing
+          path: path,
+        });
+
+        glyphs.push(glyph);
+      }
+
+      const font = new opentype.Font({
+        familyName: "PixelFont",
+        styleName: "Regular",
+        unitsPerEm: 1000,
+        ascender: 800,
+        descender: -200,
+        glyphs: glyphs,
+      });
+
+      const fontData = font.toArrayBuffer();
+      const blob = new Blob([fontData], { type: "application/octet-stream" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = "PixelFont.otf";
+      link.click();
+    }
+
+    function updateActiveButton() {
+      const buttons = document.querySelectorAll('.char-button');
+      buttons.forEach(button => {
+        if (button.querySelector('.char-preview').dataset.char === currentChar) {
+          button.classList.add('active');
+        } else {
+          button.classList.remove('active');
+        }
+      });
+    }
+
+    function updatePreviews() {
+      const buttons = document.querySelectorAll('.char-button');
+      buttons.forEach(button => {
+        let preview = button.querySelector('.char-preview');
+        let char = String.fromCharCode(65 + Array.from(buttons).indexOf(button));
+        preview.dataset.char = char;
+
+        preview.innerHTML = '';
+        let grid = characters[char];
+        let hasDesign = grid.some(row => row.includes(1));
+
+        if (!hasDesign) {
+          let letter = document.createElement('div');
+          letter.className = 'letter';
+          letter.textContent = char;
+          preview.appendChild(letter);
+        } else {
+          let previewSize = 50;
+          let cellWidth = previewSize / gridSizeX;
+          let cellHeight = previewSize / gridSizeY;
+
+          for (let i = 0; i < gridSizeY; i++) {
+            for (let j = 0; j < gridSizeX; j++) {
+              if (grid[i][j] === 1) {
+                let pixel = document.createElement('div');
+                pixel.className = 'design';
+                pixel.style.left = `${j * cellWidth}px`;
+                pixel.style.top = `${i * cellHeight}px`;
+                
+                // Apply different shapes based on selected pixel shape
+                switch (pixelShape) {
+                  case 'square':
+                    pixel.style.width = `${cellWidth}px`;
+                    pixel.style.height = `${cellHeight}px`;
+                    break;
+                  case 'dot':
+                    pixel.style.width = `${cellWidth * 0.8}px`;
+                    pixel.style.height = `${cellHeight * 0.8}px`;
+                    pixel.style.borderRadius = '50%';
+                    pixel.style.left = `${j * cellWidth + cellWidth * 0.1}px`;
+                    pixel.style.top = `${i * cellHeight + cellHeight * 0.1}px`;
+                    break;
+                  case 'plus':
+                    // Create a plus with two divs
+                    pixel.style.width = `${cellWidth}px`;
+                    pixel.style.height = `${cellHeight / 3}px`;
+                    pixel.style.top = `${i * cellHeight + cellHeight / 3}px`;
+                    
+                    let verticalBar = document.createElement('div');
+                    verticalBar.className = 'design';
+                    verticalBar.style.left = `${j * cellWidth + cellWidth / 3}px`;
+                    verticalBar.style.top = `${i * cellHeight}px`;
+                    verticalBar.style.width = `${cellWidth / 3}px`;
+                    verticalBar.style.height = `${cellHeight}px`;
+                    verticalBar.style.backgroundColor = '#000';
+                    preview.appendChild(verticalBar);
+                    break;
+                  case 'triangle':
+                    // Create a triangle using border
+                    pixel.style.width = '0';
+                    pixel.style.height = '0';
+                    pixel.style.borderLeft = `${cellWidth / 2}px solid transparent`;
+                    pixel.style.borderRight = `${cellWidth / 2}px solid transparent`;
+                    pixel.style.borderBottom = `${cellHeight}px solid #000`;
+                    pixel.style.backgroundColor = 'transparent';
+                    break;
+                }
+                
+                pixel.style.backgroundColor = '#000';
+                preview.appendChild(pixel);
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function updateTextPreview(text) {
+      const previewText = document.getElementById('preview-text');
+      previewText.innerHTML = '';
+
+      for (let char of text) {
+        if (/[A-Z]/.test(char)) {
+          let glyph = document.createElement('div');
+          glyph.className = 'preview-glyph';
+
+          let grid = characters[char];
+          let hasDesign = grid.some(row => row.includes(1));
+
+          if (hasDesign) {
+            let previewCellSizeX = 30 / gridSizeX;
+            let previewCellSizeY = 30 / gridSizeY;
+
+            for (let i = 0; i < gridSizeY; i++) {
+              for (let j = 0; j < gridSizeX; j++) {
+                if (grid[i][j] === 1) {
+                  let pixel = document.createElement('div');
+                  pixel.className = 'design';
+                  
+                  // Apply different shapes based on selected pixel shape
+                  switch (pixelShape) {
+                    case 'square':
+                      pixel.style.left = `${j * previewCellSizeX}px`;
+                      pixel.style.top = `${i * previewCellSizeY}px`;
+                      pixel.style.width = `${previewCellSizeX}px`;
+                      pixel.style.height = `${previewCellSizeY}px`;
+                      break;
+                    case 'dot':
+                      pixel.style.left = `${j * previewCellSizeX + previewCellSizeX * 0.1}px`;
+                      pixel.style.top = `${i * previewCellSizeY + previewCellSizeY * 0.1}px`;
+                      pixel.style.width = `${previewCellSizeX * 0.8}px`;
+                      pixel.style.height = `${previewCellSizeY * 0.8}px`;
+                      pixel.style.borderRadius = '50%';
+                      break;
+                    case 'plus':
+                      // Horizontal bar
+                      pixel.style.left = `${j * previewCellSizeX}px`;
+                      pixel.style.top = `${i * previewCellSizeY + previewCellSizeY / 3}px`;
+                      pixel.style.width = `${previewCellSizeX}px`;
+                      pixel.style.height = `${previewCellSizeY / 3}px`;
+                      
+                      let verticalBar = document.createElement('div');
+                      verticalBar.className = 'design';
+                      verticalBar.style.left = `${j * previewCellSizeX + previewCellSizeX / 3}px`;
+                      verticalBar.style.top = `${i * previewCellSizeY}px`;
+                      verticalBar.style.width = `${previewCellSizeX / 3}px`;
+                      verticalBar.style.height = `${previewCellSizeY}px`;
+                      verticalBar.style.backgroundColor = '#000';
+                      glyph.appendChild(verticalBar);
+                      break;
+                    case 'triangle':
+                      pixel.style.left = `${j * previewCellSizeX}px`;
+                      pixel.style.top = `${i * previewCellSizeY}px`;
+                      pixel.style.width = '0';
+                      pixel.style.height = '0';
+                      pixel.style.borderLeft = `${previewCellSizeX / 2}px solid transparent`;
+                      pixel.style.borderRight = `${previewCellSizeX / 2}px solid transparent`;
+                      pixel.style.borderBottom = `${previewCellSizeY}px solid #000`;
+                      pixel.style.backgroundColor = 'transparent';
+                      break;
+                  }
+                  
+                  pixel.style.backgroundColor = '#000';
+                  glyph.appendChild(pixel);
+                }
+              }
+            }
+          } else {
+            glyph.textContent = char;
+          }
+
+          previewText.appendChild(glyph);
+        } else {
+          // Add space for non-alphabetic characters
+          let space = document.createElement('div');
+          space.style.width = '30px';
+          previewText.appendChild(space);
+        }
+      }
+    }
+
+    // Event listeners
+    document.getElementById('export-btn').addEventListener('click', createFontFile);
+    document.getElementById('typing-field').addEventListener('input', (e) => {
+      updateTextPreview(e.target.value.toUpperCase());
+    });
+    document.getElementById('apply-grid').addEventListener('click', () => {
+      if (confirm('Changing grid size will reset all characters! Continue?')) {
+        gridSizeX = parseInt(document.getElementById('grid-cols').value) || 7;
+        gridSizeY = parseInt(document.getElementById('grid-rows').value) || 5;
+        initializeGrid();
+      }
+    });
+    
+    // Shape selector buttons
+    document.querySelectorAll('.shape-selector').forEach(button => {
+      button.addEventListener('click', () => {
+        // Update active state
+        document.querySelectorAll('.shape-selector').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        button.classList.add('active');
+        
+        // Update current shape
+        pixelShape = button.dataset.shape;
+        
+        // Redraw everything with new shape
+        drawGrid();
+        updatePreviews();
+        updateTextPreview(document.getElementById('typing-field').value.toUpperCase());
+      });
+    });
+
+    // Initialize first grid
+    initializeGrid();
+  </script>
+</body>
+</html>
