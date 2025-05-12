@@ -406,6 +406,8 @@ function setup() {
       connectionDotStyles.pop();
       currentConnectionIndex--;
     }
+    saveCurrentLetterState(); // Save state after undo
+    updateLetterButtonIndicator(currentLetter); // Update indicator after undo
   });
   actionControl.child(undoButton);
 
@@ -419,6 +421,7 @@ function setup() {
     connectionDotStyles = [nextDotStyle];
     currentConnectionIndex = 0;
     saveCurrentLetterState(); // Save state after clearing
+    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
   });
   actionControl.child(clearButton);
 
@@ -507,16 +510,8 @@ function setup() {
     if (letter === currentLetter) {
       btn.addClass("active");
     }
-    // Add dot indicator if letter has drawings
-    if (
-      letterDrawings[letter] &&
-      letterDrawings[letter].placedDots.some(
-        (connection) => connection.length > 0
-      )
-    ) {
-      let dot = createDiv("");
-      dot.class("letter-dot");
-      btn.child(dot);
+    if (hasLetterDrawing(letter)) {
+      btn.addClass("has-drawing");
     }
     btn.mousePressed(() => {
       saveCurrentLetterState();
@@ -538,16 +533,8 @@ function setup() {
     if (number === currentLetter) {
       btn.addClass("active");
     }
-    // Add dot indicator if number has drawings
-    if (
-      letterDrawings[number] &&
-      letterDrawings[number].placedDots.some(
-        (connection) => connection.length > 0
-      )
-    ) {
-      let dot = createDiv("");
-      dot.class("letter-dot");
-      btn.child(dot);
+    if (hasLetterDrawing(number)) {
+      btn.addClass("has-drawing");
     }
     btn.mousePressed(() => {
       saveCurrentLetterState();
@@ -569,16 +556,8 @@ function setup() {
     if (punct === currentLetter) {
       btn.addClass("active");
     }
-    // Add dot indicator if punctuation has drawings
-    if (
-      letterDrawings[punct] &&
-      letterDrawings[punct].placedDots.some(
-        (connection) => connection.length > 0
-      )
-    ) {
-      let dot = createDiv("");
-      dot.class("letter-dot");
-      btn.child(dot);
+    if (hasLetterDrawing(punct)) {
+      btn.addClass("has-drawing");
     }
     btn.mousePressed(() => {
       saveCurrentLetterState();
@@ -626,9 +605,6 @@ function setup() {
 
   updateGridSize();
   noFill();
-  placedDots.push([]); // Initialize with the first connection
-  connectionColors.push([...currentColor]); // Store the color for the first connection
-  connectionDotStyles.push(nextDotStyle); // Store the current dot style for this new connection
 
   // Create console panel
   consolePanel = createDiv("");
@@ -991,6 +967,7 @@ function keyPressed() {
     connectionDotStyles = [nextDotStyle];
     currentConnectionIndex = 0;
     saveCurrentLetterState(); // Save state after clearing
+    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
   } else if (key === "n" || key === "N") {
     currentConnectionIndex++;
     placedDots.push([]);
@@ -1278,8 +1255,8 @@ function updateConsole() {
   // Clear existing content
   consolePanel.html("");
 
-  // Add title
-  consolePanel.child(createElement("h3", "Connections"));
+  // Add title with current letter
+  consolePanel.child(createElement("h3", `Letter ${currentLetter}`));
 
   // Add info for each connection
   let sizeLabels = ["S", "M", "L"];
@@ -1323,7 +1300,7 @@ function updateConsole() {
         dotInfo.html(
           `Dot ${String(dotIndex + 1).padStart(2, "0")}: ${colLetter}${String(
             rowNumber
-          ).padStart(2, "0")}, size=${sizeLabel}`
+          ).padStart(2, "0")}, size = ${sizeLabel}`
         );
         connectionDiv.child(dotInfo);
       });
@@ -1423,32 +1400,15 @@ function initializeLetterDrawings() {
 }
 
 function saveCurrentLetterState() {
+  // Save the current state for the current letter
   letterDrawings[currentLetter] = {
     placedDots: JSON.parse(JSON.stringify(placedDots)),
     connectionColors: JSON.parse(JSON.stringify(connectionColors)),
     connectionDotStyles: [...connectionDotStyles],
   };
 
-  // Update dot indicators for all letters
-  letterButtons.forEach((btn, index) => {
-    let letter = index < 26 ? String.fromCharCode(65 + index) : ".";
-    let hasDrawing =
-      letterDrawings[letter] &&
-      letterDrawings[letter].placedDots.some(
-        (connection) => connection.length > 0
-      );
-
-    // Remove existing dot if any
-    let existingDot = select(`#letter-\\${letter} .letter-dot`);
-    if (existingDot) existingDot.remove();
-
-    // Add dot if letter has drawing
-    if (hasDrawing) {
-      let dot = createDiv("");
-      dot.class("letter-dot");
-      btn.child(dot);
-    }
-  });
+  // Update the indicator for the current letter
+  updateLetterButtonIndicator(currentLetter);
 
   // Force preview update if this letter is in the preview text
   if (previewText && previewText.includes(currentLetter)) {
@@ -1462,4 +1422,27 @@ function loadLetterState(letter) {
   connectionColors = JSON.parse(JSON.stringify(state.connectionColors));
   connectionDotStyles = [...state.connectionDotStyles];
   currentConnectionIndex = 0;
+}
+
+function hasLetterDrawing(letter) {
+  let state = letterDrawings[letter];
+  return state && state.placedDots.some((connection) => connection.length > 0);
+}
+
+function updateLetterButtonIndicator(letter) {
+  let btn = select(`#letter-${letter}`);
+  if (btn) {
+    if (hasLetterDrawing(letter)) {
+      btn.addClass("has-drawing");
+    } else {
+      btn.removeClass("has-drawing");
+    }
+  }
+}
+
+function updateAllLetterIndicators() {
+  // Update indicators for all letters
+  Object.keys(letterDrawings).forEach((letter) => {
+    updateLetterButtonIndicator(letter);
+  });
 }

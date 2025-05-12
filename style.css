@@ -652,31 +652,6 @@ body.dark-mode .export-button:hover {
   position: relative;
 }
 
-.letter-dot {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 4px;
-  height: 4px;
-  background: #0066ff;
-  border-radius: 50%;
-  transition: background-color 0.3s ease;
-}
-
-.letter-button:hover .letter-dot,
-.letter-button.active .letter-dot {
-  background: #fff;
-}
-
-body.dark-mode .letter-dot {
-  background: #fff;
-}
-
-body.dark-mode .letter-button:hover .letter-dot,
-body.dark-mode .letter-button.active .letter-dot {
-  background: #1a1a1a;
-}
-
 .letter-button:hover {
   background: #0066ff;
   color: #fff;
@@ -687,6 +662,73 @@ body.dark-mode .letter-button.active .letter-dot {
   background: #0066ff;
   color: #fff;
   border: 1.5px solid #0066ff;
+}
+
+.letter-button::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 102, 255, 0.2);
+  transition: all 0.3s ease;
+  opacity: 0;
+}
+
+.letter-button.has-drawing::after {
+  background: #0066ff;
+  opacity: 1;
+}
+
+.letter-button:hover::after {
+  transform: scale(1.2);
+}
+
+.letter-button.active::after {
+  background: #fff;
+}
+
+/* Dark mode styles */
+body.dark-mode .letter-button {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.dark-mode .letter-button:hover,
+body.dark-mode .letter-button.active {
+  background: #fff;
+  color: #1a1a1a;
+  border: 1.5px solid #fff;
+}
+
+body.dark-mode .letter-button::after {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode .letter-button.has-drawing::after {
+  background: #fff;
+}
+
+body.dark-mode .letter-button.active::after {
+  background: #1a1a1a;
+}
+
+body.dark-mode .text-preview {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.dark-mode .text-preview::placeholder {
+  color: #fff;
+  opacity: 0.7;
+}
+
+body.dark-mode .text-preview:focus {
+  border-color: #fff;
 }
 
 .text-preview {
@@ -706,6 +748,10 @@ body.dark-mode .letter-button.active .letter-dot {
   transform: translateY(-10px);
   transition: opacity 0.3s ease, transform 0.3s ease;
   pointer-events: none;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
 .text-preview.visible {
@@ -724,31 +770,10 @@ body.dark-mode .letter-button.active .letter-dot {
   border: 1.5px solid #0066ff;
 }
 
-/* Dark mode styles */
-body.dark-mode .letter-button {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-body.dark-mode .letter-button:hover,
-body.dark-mode .letter-button.active {
-  background: #fff;
-  color: #1a1a1a;
-  border: 1.5px solid #fff;
-}
-
-body.dark-mode .text-preview {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-body.dark-mode .text-preview::placeholder {
-  color: #fff;
-  opacity: 0.7;
-}
-
-body.dark-mode .text-preview:focus {
-  border-color: #fff;
+/* Prevent text selection */
+* {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
