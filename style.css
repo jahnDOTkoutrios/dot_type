@@ -128,6 +128,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   position: static;
   display: flex;
   gap: 10px;
+  margin-bottom: 8px;
 }
 
 .color-button {
@@ -171,12 +172,17 @@ input[type="range"]::-webkit-slider-thumb:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 120px;
-  width: 120px;
+  width: 240px;
   justify-content: center;
 }
 
 .control-button:hover {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+}
+
+.control-button.active {
   background: #0066ff;
   color: #fff;
   border: 1.5px solid #0066ff;
@@ -260,6 +266,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   box-sizing: border-box;
   scrollbar-width: none;  /* Firefox */
   -ms-overflow-style: none;  /* IE and Edge */
+  margin-bottom: 55px; /* Gap between console and export button */
 }
 
 .console-panel::-webkit-scrollbar {
@@ -307,17 +314,16 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .export-buttons {
   position: fixed;
   bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: auto;
+  right: 20px;
+  width: 240px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 15px;
 }
 
 .export-button {
-  width: 120px;
+  width: 100%;
   background: #0066ff;
   border: none;
   color: white;
@@ -337,10 +343,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .shortcuts-info {
-  display: none;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 16px;
   position: fixed;
-  bottom: 70px;
-  left: 20px;
+  bottom: 20px;
+  left: 76px;
   z-index: 30;
   font-family: 'G2-Erika-Mono', monospace;
   font-size: 14px;
@@ -348,14 +356,17 @@ input[type="range"]::-webkit-slider-thumb:hover {
   padding: 0;
   line-height: 2.2;
   opacity: 0;
+  transform: translateX(-20px);
   pointer-events: none;
-  transition: opacity 0.3s;
+  transition: none;
+  text-transform: uppercase;
 }
 
 .show-shortcuts {
-  display: block !important;
   opacity: 1;
+  transform: translateX(0);
   pointer-events: auto;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .help-button {
@@ -376,13 +387,15 @@ input[type="range"]::-webkit-slider-thumb:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  opacity: 1;
+  transform: none;
 }
 
 .help-button:hover, .help-button:focus {
   background: #0066ff;
   color: #fff;
   border: 1.5px solid #0066ff;
+  transition: all 0.3s ease;
 }
 
 .shortcuts-info h3 {
@@ -395,7 +408,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .shortcuts-info div {
   display: flex;
   align-items: center;
-  margin-bottom: 4px;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .shortcuts-info span.key {
@@ -557,9 +571,9 @@ body.dark-mode .control-button.active,
 body.dark-mode .action-button.active,
 body.dark-mode .size-button.active,
 body.dark-mode .style-button.active {
-  background: #fff !important;
-  color: #1a1a1a !important;
-  border-color: #fff !important;
+  background: #fff;
+  color: #1a1a1a;
+  border: 1.5px solid #fff;
 }
 
 body.dark-mode .console-panel {
@@ -591,4 +605,150 @@ body.dark-mode .shortcuts-info {
 body.dark-mode .shortcuts-info .key {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode .export-button {
+  background: #fff;
+  color: #1a1a1a;
+}
+
+body.dark-mode .export-button:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.letter-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 0;
+  margin-top: 0;
+  width: 120px;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.letter-selector.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.letter-button {
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 102, 255, 0.1);
+  border: 1px solid rgba(0, 102, 255, 0.2);
+  color: #0066ff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'G2-Erika-Mono', monospace;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.letter-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  background: #0066ff;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+}
+
+.letter-button:hover .letter-dot,
+.letter-button.active .letter-dot {
+  background: #fff;
+}
+
+body.dark-mode .letter-dot {
+  background: #fff;
+}
+
+body.dark-mode .letter-button:hover .letter-dot,
+body.dark-mode .letter-button.active .letter-dot {
+  background: #1a1a1a;
+}
+
+.letter-button:hover {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+}
+
+.letter-button.active {
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
+}
+
+.text-preview {
+  width: 120px;
+  height: 36px;
+  background: rgba(0, 102, 255, 0.1);
+  border: 1px solid rgba(0, 102, 255, 0.2);
+  color: #0066ff;
+  border-radius: 4px;
+  font-family: 'G2-Erika-Mono', monospace;
+  font-size: 14px;
+  padding: 0 8px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.text-preview.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.text-preview::placeholder {
+  color: #0066ff;
+  opacity: 0.7;
+}
+
+.text-preview:focus {
+  outline: none;
+  border: 1.5px solid #0066ff;
+}
+
+/* Dark mode styles */
+body.dark-mode .letter-button {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.dark-mode .letter-button:hover,
+body.dark-mode .letter-button.active {
+  background: #fff;
+  color: #1a1a1a;
+  border: 1.5px solid #fff;
+}
+
+body.dark-mode .text-preview {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+body.dark-mode .text-preview::placeholder {
+  color: #fff;
+  opacity: 0.7;
+}
+
+body.dark-mode .text-preview:focus {
+  border-color: #fff;
 }
