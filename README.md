@@ -24,7 +24,6 @@ A creative coding project that allows you to create beautiful dot-based artwork 
   - Each connection can have its own style and color
 - **Export Options**:
   - PNG export
-  - SVG export (vector format)
   - Console log export (for data analysis)
 
 ## Controls
@@ -65,12 +64,6 @@ A creative coding project that allows you to create beautiful dot-based artwork 
 - Saves the current artwork as a PNG file
 - Includes timestamp in filename
 - Preserves all visual elements including grid
-
-### SVG Export
-
-- Exports artwork in vector format
-- Perfect for scaling and editing in vector software
-- Maintains all connection styles and colors
 
 ### Console Log Export
 

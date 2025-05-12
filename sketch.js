@@ -94,7 +94,6 @@ let currentPaletteIndex = 0;
 let COLORS = COLOR_PALETTES[currentPaletteIndex].colors;
 
 function exportZipWithSVGAndLog() {
-  // Generate SVG content (as string)
   let timestamp =
     year() +
     "-" +
@@ -107,74 +106,8 @@ function exportZipWithSVGAndLog() {
     minute() +
     "-" +
     second();
-  let svgFilename = "artwork_" + timestamp + ".svg";
   let logFilename = "console_log_" + timestamp + ".txt";
-
-  // --- SVG content (copied from exportSVG, but as a string) ---
-  let svg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-  <!-- Grid of dots -->
-  <g fill="black">`;
-  let yOffset = gridRows === 7 ? padding - cellSize : padding;
-  let dotRadius = (cellSize * 0.16) / 2;
-  for (let i = 0; i < gridCols; i++) {
-    for (let j = 0; j < gridRows; j++) {
-      let x = i * cellSize + padding + cellSize / 2;
-      let y = j * cellSize + yOffset + cellSize / 2;
-      svg += `\n    <circle cx="${x}" cy="${y}" r="${dotRadius}"/>`;
-    }
-  }
-  svg += `\n  </g>`;
-  placedDots.forEach((connection, index) => {
-    if (connection.length > 0) {
-      let color = connectionColors[index];
-      let colorStr = `rgb(${color.join(",")})`;
-      svg += `\n  <!-- Connection ${
-        index + 1
-      } -->\n  <g stroke="${colorStr}" stroke-width="6" fill="${colorStr}">`;
-      for (let i = 0; i < connection.length - 1; i++) {
-        let d1 = connection[i];
-        let d2 = connection[i + 1];
-        let r1 = (d1.size * cellSize) / 2;
-        let r2 = (d2.size * cellSize) / 2;
-        let angle = atan2(d2.y - d1.y, d2.x - d1.x);
-        let perpAngle = angle + HALF_PI;
-        let x1a = d1.x + cos(perpAngle) * r1;
-        let y1a = d1.y + sin(perpAngle) * r1;
-        let x1b = d1.x - cos(perpAngle) * r1;
-        let y1b = d1.y - sin(perpAngle) * r1;
-        let x2a = d2.x + cos(perpAngle) * r2;
-        let y2a = d2.y + sin(perpAngle) * r2;
-        let x2b = d2.x - cos(perpAngle) * r2;
-        let y2b = d2.y - sin(perpAngle) * r2;
-        if (connectionStyles[index]) {
-          let distance = p5.Vector.dist(
-            createVector(d1.x, d1.y),
-            createVector(d2.x, d2.y)
-          );
-          let controlDist = distance * 0.4;
-          let cp1ax = x1a + cos(angle) * controlDist;
-          let cp1ay = y1a + sin(angle) * controlDist;
-          let cp2ax = x2a - cos(angle) * controlDist;
-          let cp2ay = y2a - sin(angle) * controlDist;
-          let cp1bx = x1b + cos(angle) * controlDist;
-          let cp1by = y1b + sin(angle) * controlDist;
-          let cp2bx = x2b - cos(angle) * controlDist;
-          let cp2by = y2b - sin(angle) * controlDist;
-          svg += `\n    <path d=\"M ${x1a} ${y1a} C ${cp1ax} ${cp1ay} ${cp2ax} ${cp2ay} ${x2a} ${y2a} A ${r2} ${r2} 0 1 1 ${x2b} ${y2b} C ${cp2bx} ${cp2by} ${cp1bx} ${cp1by} ${x1b} ${y1b} A ${r1} ${r1} 0 1 1 ${x1a} ${y1a} Z\"/>`;
-        } else {
-          svg += `\n    <path d=\"M ${x1a} ${y1a} L ${x2a} ${y2a} A ${r2} ${r2} 0 1 1 ${x2b} ${y2b} L ${x1b} ${y1b} A ${r1} ${r1} 0 1 1 ${x1a} ${y1a} Z\"/>`;
-        }
-      }
-      svg += `\n  </g>\n  <g stroke="${colorStr}" stroke-width=\"6\" fill=\"white\">`;
-      connection.forEach((dot) => {
-        let r = dot.size * cellSize;
-        svg += `\n    <circle cx=\"${dot.x}\" cy=\"${dot.y}\" r=\"${r / 2}\"/>`;
-      });
-      svg += `\n  </g>`;
-    }
-  });
-  svg += `\n</svg>`;
+  let svgFilename = "artwork_" + timestamp + ".svg";
 
   // --- Log content (with S/M/L and grid coordinates) ---
   let sizeLabels = ["S", "M", "L"];
@@ -206,10 +139,13 @@ function exportZipWithSVGAndLog() {
     }
   });
 
+  // --- Generate SVG content ---
+  let svgContent = generateSVG();
+
   // --- Create ZIP ---
   let zip = new JSZip();
-  zip.file(svgFilename, svg);
   zip.file(logFilename, content);
+  zip.file(svgFilename, svgContent);
   zip.generateAsync({ type: "blob" }).then(function (blob) {
     let zipFilename = `dot_type_export_${timestamp}.zip`;
     let url = URL.createObjectURL(blob);
@@ -221,6 +157,121 @@ function exportZipWithSVGAndLog() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   });
+}
+
+function generateSVG() {
+  let width = canvasSize + padding * 2;
+  let height = canvasSize + padding * 2;
+
+  // Start SVG content
+  let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Add background
+  svg += `<rect width="${width}" height="${height}" fill="${
+    isDarkMode ? "#1a1a1a" : "#ffffff"
+  }"/>`;
+
+  // Add game board background
+  svg += `<rect x="${padding - 20}" y="${padding - 20}" width="${
+    canvasSize + 40
+  }" height="${canvasSize + 40}" fill="${
+    isDarkMode ? "#232323" : "#fafafa"
+  }"/>`;
+
+  // Add grid dots
+  let yOffset = getGridYOffset();
+  let dotRadius = cellSize * 0.16;
+  for (let i = 0; i < gridCols; i++) {
+    for (let j = 0; j < gridRows; j++) {
+      let x = i * cellSize + padding + cellSize / 2;
+      let y = j * cellSize + yOffset + cellSize / 2;
+      svg += `<circle cx="${x}" cy="${y}" r="${dotRadius}" fill="${
+        isDarkMode ? "#c8c8c8" : "#000000"
+      }"/>`;
+    }
+  }
+
+  // Add connections and dots
+  placedDots.forEach((connection, index) => {
+    if (connection.length > 0) {
+      // Draw connections
+      for (let i = 0; i < connection.length - 1; i++) {
+        let d1 = connection[i];
+        let d2 = connection[i + 1];
+        let color = connectionColors[index];
+        let isCurvedConnection = connectionStyles[index];
+
+        let x1 = d1.x;
+        let y1 = d1.y;
+        let x2 = d2.x;
+        let y2 = d2.y;
+
+        let r1 = (d1.size * cellSize) / 2;
+        let r2 = (d2.size * cellSize) / 2;
+
+        // Calculate tangent points
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        let angle = Math.atan2(dy, dx);
+        let tangentAngle = Math.acos((r1 - r2) / distance);
+
+        let angle1 = angle + tangentAngle;
+        let angle2 = angle - tangentAngle;
+
+        let x1a = x1 + r1 * Math.cos(angle1);
+        let y1a = y1 + r1 * Math.sin(angle1);
+        let x1b = x1 + r1 * Math.cos(angle2);
+        let y1b = y1 + r1 * Math.sin(angle2);
+
+        let x2a = x2 + r2 * Math.cos(angle1);
+        let y2a = y2 + r2 * Math.sin(angle1);
+        let x2b = x2 + r2 * Math.cos(angle2);
+        let y2b = y2 + r2 * Math.sin(angle2);
+
+        if (isCurvedConnection) {
+          let controlDist = distance * 0.4;
+          let cp1ax = x1a + Math.cos(angle) * controlDist;
+          let cp1ay = y1a + Math.sin(angle) * controlDist;
+          let cp2ax = x2a - Math.cos(angle) * controlDist;
+          let cp2ay = y2a - Math.sin(angle) * controlDist;
+
+          let cp1bx = x1b + Math.cos(angle) * controlDist;
+          let cp1by = y1b + Math.sin(angle) * controlDist;
+          let cp2bx = x2b - Math.cos(angle) * controlDist;
+          let cp2by = y2b - Math.sin(angle) * controlDist;
+
+          svg += `<path d="M ${x1a} ${y1a} C ${cp1ax} ${cp1ay}, ${cp2ax} ${cp2ay}, ${x2a} ${y2a} L ${x2b} ${y2b} C ${cp2bx} ${cp2by}, ${cp1bx} ${cp1by}, ${x1b} ${y1b} Z" fill="rgb(${color.join(
+            ","
+          )})"/>`;
+        } else {
+          svg += `<path d="M ${x1a} ${y1a} L ${x2a} ${y2a} L ${x2b} ${y2b} L ${x1b} ${y1b} Z" fill="rgb(${color.join(
+            ","
+          )})"/>`;
+        }
+      }
+
+      // Draw dots
+      connection.forEach((dot) => {
+        let r = dot.size * cellSize;
+        if (dot.style === "filled") {
+          svg += `<circle cx="${dot.x}" cy="${dot.y}" r="${
+            r / 2
+          }" fill="rgb(${connectionColors[index].join(",")})"/>`;
+        } else {
+          svg += `<circle cx="${dot.x}" cy="${dot.y}" r="${
+            r / 2
+          }" fill="rgb(${connectionColors[index].join(",")})"/>`;
+          svg += `<circle cx="${dot.x}" cy="${dot.y}" r="${
+            (r - 16) / 2
+          }" fill="#ffffff"/>`;
+        }
+      });
+    }
+  });
+
+  svg += "</svg>";
+  return svg;
 }
 
 function setup() {
@@ -372,8 +423,8 @@ function setup() {
   exportButtons.class("export-buttons");
 
   // Create a single export button for SVG and Log
-  let exportComboButton = createButton("Export");
-  exportComboButton.class("export-button");
+  let exportComboButton = createButton("EXPORT");
+  exportComboButton.class("control-button");
   exportComboButton.mousePressed(exportZipWithSVGAndLog);
   exportButtons.child(exportComboButton);
 
@@ -499,38 +550,66 @@ function drawTangentLines(d1, d2, isCurvedConnection, color) {
   let r1 = (d1.size * cellSize) / 2;
   let r2 = (d2.size * cellSize) / 2;
 
-  // Calculate the angle between the two circles
-  let angle = atan2(y2 - y1, x2 - x1);
-  let perpAngle = angle + HALF_PI;
+  // Ensure r1 is the larger radius
+  let swap = false;
+  if (r2 > r1) {
+    [r1, r2] = [r2, r1];
+    [x1, x2] = [x2, x1];
+    [y1, y2] = [y2, y1];
+    swap = true;
+  }
 
-  // Calculate the tangent points
-  let x1a = x1 + cos(perpAngle) * r1;
-  let y1a = y1 + sin(perpAngle) * r1;
-  let x1b = x1 - cos(perpAngle) * r1;
-  let y1b = y1 - sin(perpAngle) * r1;
+  // Calculate the distance between centers
+  let dx = x2 - x1;
+  let dy = y2 - y1;
+  let distance = sqrt(dx * dx + dy * dy);
 
-  let x2a = x2 + cos(perpAngle) * r2;
-  let y2a = y2 + sin(perpAngle) * r2;
-  let x2b = x2 - cos(perpAngle) * r2;
-  let y2b = y2 - sin(perpAngle) * r2;
+  // Calculate the angle between centers
+  let angle = atan2(dy, dx);
+
+  // Calculate the angle of the tangent line
+  let tangentAngle = acos((r1 - r2) / distance);
+
+  // Calculate the two tangent angles
+  let angle1 = angle + tangentAngle;
+  let angle2 = angle - tangentAngle;
+
+  // Calculate the tangent points on the larger circle
+  let x1a = x1 + r1 * Math.cos(angle1);
+  let y1a = y1 + r1 * Math.sin(angle1);
+  let x1b = x1 + r1 * Math.cos(angle2);
+  let y1b = y1 + r1 * Math.sin(angle2);
+
+  // Calculate the tangent points on the smaller circle
+  let x2a = x2 + r2 * Math.cos(angle1);
+  let y2a = y2 + r2 * Math.sin(angle1);
+  let x2b = x2 + r2 * Math.cos(angle2);
+  let y2b = y2 + r2 * Math.sin(angle2);
+
+  // Swap points if we swapped the circles
+  if (swap) {
+    [x1a, x2a] = [x2a, x1a];
+    [y1a, y2a] = [y2a, y1a];
+    [x1b, x2b] = [x2b, x1b];
+    [y1b, y2b] = [y2b, y1b];
+  }
 
   // Draw the connection with inward stroke
   noStroke();
   fill(color);
   if (isCurvedConnection) {
     // Calculate control points for the Bézier curves
-    let distance = p5.Vector.dist(createVector(x1, y1), createVector(x2, y2));
     let controlDist = distance * 0.4;
 
-    let cp1ax = x1a + cos(angle) * controlDist;
-    let cp1ay = y1a + sin(angle) * controlDist;
-    let cp2ax = x2a - cos(angle) * controlDist;
-    let cp2ay = y2a - sin(angle) * controlDist;
+    let cp1ax = x1a + Math.cos(angle) * controlDist;
+    let cp1ay = y1a + Math.sin(angle) * controlDist;
+    let cp2ax = x2a - Math.cos(angle) * controlDist;
+    let cp2ay = y2a - Math.sin(angle) * controlDist;
 
-    let cp1bx = x1b + cos(angle) * controlDist;
-    let cp1by = y1b + sin(angle) * controlDist;
-    let cp2bx = x2b - cos(angle) * controlDist;
-    let cp2by = y2b - sin(angle) * controlDist;
+    let cp1bx = x1b + Math.cos(angle) * controlDist;
+    let cp1by = y1b + Math.sin(angle) * controlDist;
+    let cp2bx = x2b - Math.cos(angle) * controlDist;
+    let cp2by = y2b - Math.sin(angle) * controlDist;
 
     // Draw the curved connecting shape
     beginShape();
@@ -561,59 +640,91 @@ function drawDot(x, y, size, color, style) {
     fill(color);
     ellipse(x, y, r);
     fill(255);
-    ellipse(x, y, r - 12);
+    ellipse(x, y, r - 16);
   }
 }
 
 function drawPreview() {
   let [gx, gy] = getGridMousePos();
   if (gx !== null && gy !== null) {
-    noStroke();
-    fill(0, 30); // Single, consistent color for all preview elements
-
-    // Draw the preview dot
-    let r = dotSize * cellSize;
-    if (nextDotStyle === "filled") {
-      ellipse(gx, gy, r);
-    } else {
-      // For outlined style, draw a ring
-      ellipse(gx, gy, r);
-      fill(255); // White background
-      ellipse(gx, gy, r - 12);
-      fill(0, 30); // Back to preview color
-      ellipse(gx, gy, r - 12);
-    }
-
     // Draw preview tangent lines if there is at least one dot placed
     let currentConnection = placedDots[currentConnectionIndex];
     if (currentConnection.length > 0) {
       let lastDot = currentConnection[currentConnection.length - 1];
       let previewDot = { x: gx, y: gy, size: dotSize };
 
-      // Calculate the angle between the two circles
-      let angle = atan2(gy - lastDot.y, gx - lastDot.x);
-      let perpAngle = angle + HALF_PI;
+      let x1 = lastDot.x;
+      let y1 = lastDot.y;
+      let x2 = gx;
+      let y2 = gy;
 
-      // Calculate the tangent points
       let r1 = (lastDot.size * cellSize) / 2;
       let r2 = (dotSize * cellSize) / 2;
 
-      let x1a = lastDot.x + cos(perpAngle) * r1;
-      let y1a = lastDot.y + sin(perpAngle) * r1;
-      let x1b = lastDot.x - cos(perpAngle) * r1;
-      let y1b = lastDot.y - sin(perpAngle) * r1;
+      // Ensure r1 is the larger radius
+      let swap = false;
+      if (r2 > r1) {
+        [r1, r2] = [r2, r1];
+        [x1, x2] = [x2, x1];
+        [y1, y2] = [y2, y1];
+        swap = true;
+      }
 
-      let x2a = gx + cos(perpAngle) * r2;
-      let y2a = gy + sin(perpAngle) * r2;
-      let x2b = gx - cos(perpAngle) * r2;
-      let y2b = gy - sin(perpAngle) * r2;
+      // Calculate the distance between centers
+      let dx = x2 - x1;
+      let dy = y2 - y1;
+      let distance = sqrt(dx * dx + dy * dy);
+
+      // Calculate the angle between centers
+      let angle = atan2(dy, dx);
+
+      // Calculate the angle of the tangent line
+      let tangentAngle = acos((r1 - r2) / distance);
+
+      // Calculate the two tangent angles
+      let angle1 = angle + tangentAngle;
+      let angle2 = angle - tangentAngle;
+
+      // Calculate the tangent points on the larger circle
+      let x1a = x1 + r1 * cos(angle1);
+      let y1a = y1 + r1 * sin(angle1);
+      let x1b = x1 + r1 * cos(angle2);
+      let y1b = y1 + r1 * sin(angle2);
+
+      // Calculate the tangent points on the smaller circle
+      let x2a = x2 + r2 * cos(angle1);
+      let y2a = y2 + r2 * sin(angle1);
+      let x2b = x2 + r2 * cos(angle2);
+      let y2b = y2 + r2 * sin(angle2);
+
+      // Swap points if we swapped the circles
+      if (swap) {
+        [x1a, x2a] = [x2a, x1a];
+        [y1a, y2a] = [y2a, y1a];
+        [x1b, x2b] = [x2b, x1b];
+        [y1b, y2b] = [y2b, y1b];
+      }
+
+      // Draw preview connection with hex color #c1c1c1
+      noFill();
+      stroke("#c1c1c1");
+      strokeWeight(1.5);
+
+      // Draw the circle segments
+      if (swap) {
+        // If preview circle is larger, it should show the longer arc
+        arc(x2, y2, r2 * 2, r2 * 2, angle2, angle1 + TWO_PI);
+        // Existing circle shows shorter arc in opposite direction
+        arc(x1, y1, r1 * 2, r1 * 2, angle1, angle2);
+      } else {
+        // If existing circle is larger, it should show the longer arc
+        arc(x1, y1, r1 * 2, r1 * 2, angle1, angle2 + TWO_PI);
+        // Preview circle shows shorter arc in opposite direction
+        arc(x2, y2, r2 * 2, r2 * 2, angle2, angle1);
+      }
 
       if (connectionStyles[currentConnectionIndex]) {
         // Calculate control points for the Bézier curves
-        let distance = p5.Vector.dist(
-          createVector(lastDot.x, lastDot.y),
-          createVector(gx, gy)
-        );
         let controlDist = distance * 0.4;
 
         let cp1ax = x1a + cos(angle) * controlDist;
@@ -626,22 +737,28 @@ function drawPreview() {
         let cp2bx = x2b - cos(angle) * controlDist;
         let cp2by = y2b - sin(angle) * controlDist;
 
-        // Draw the curved connecting shape
+        // Draw the curved tangent lines
+        noFill();
         beginShape();
         vertex(x1a, y1a);
         bezierVertex(cp1ax, cp1ay, cp2ax, cp2ay, x2a, y2a);
-        vertex(x2b, y2b);
-        bezierVertex(cp2bx, cp2by, cp1bx, cp1by, x1b, y1b);
-        endShape(CLOSE);
-      } else {
-        // Draw linear connecting shape
+        endShape();
         beginShape();
-        vertex(x1a, y1a);
-        vertex(x2a, y2a);
-        vertex(x2b, y2b);
         vertex(x1b, y1b);
-        endShape(CLOSE);
+        bezierVertex(cp1bx, cp1by, cp2bx, cp2by, x2b, y2b);
+        endShape();
+      } else {
+        // Draw linear tangent lines
+        line(x1a, y1a, x2a, y2a);
+        line(x1b, y1b, x2b, y2b);
       }
+    } else {
+      // If no dots are placed yet, show full circle preview
+      noFill();
+      stroke("#c1c1c1");
+      strokeWeight(1.5);
+      let r = dotSize * cellSize;
+      ellipse(gx, gy, r);
     }
   }
 }
@@ -906,12 +1023,12 @@ function drawTangentLinesOnBuffer(buffer, d1, d2, isCurvedConnection) {
   let x1a = x1 + cos(perpAngle) * r1;
   let y1a = y1 + sin(perpAngle) * r1;
   let x1b = x1 - cos(perpAngle) * r1;
-  let y1b = y1 - sin(angle) * r1;
+  let y1b = y1 - sin(perpAngle) * r1;
 
   let x2a = x2 + cos(perpAngle) * r2;
   let y2a = y2 + sin(perpAngle) * r2;
   let x2b = x2 - cos(perpAngle) * r2;
-  let y2b = y2 - sin(angle) * r2;
+  let y2b = y2 - sin(perpAngle) * r2;
 
   if (isCurvedConnection) {
     // Calculate control points for the Bézier curves
@@ -1048,168 +1165,6 @@ function updateConsole() {
       consolePanel.child(connectionDiv);
     }
   });
-}
-
-function exportSVG() {
-  let timestamp =
-    year() +
-    "-" +
-    month() +
-    "-" +
-    day() +
-    "_" +
-    hour() +
-    "-" +
-    minute() +
-    "-" +
-    second();
-  let filename = "artwork_" + timestamp + ".svg";
-
-  // Create SVG content
-  let svg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-  <!-- Grid of dots -->
-  <g fill="black">`;
-
-  // Add grid dots
-  let yOffset = gridRows === 7 ? padding - cellSize : padding;
-  let dotRadius = (cellSize * 0.16) / 2;
-  for (let i = 0; i < gridCols; i++) {
-    for (let j = 0; j < gridRows; j++) {
-      let x = i * cellSize + padding + cellSize / 2;
-      let y = j * cellSize + yOffset + cellSize / 2;
-      svg += `\n    <circle cx="${x}" cy="${y}" r="${dotRadius}"/>`;
-    }
-  }
-  svg += `\n  </g>`;
-
-  // Add connections
-  placedDots.forEach((connection, index) => {
-    if (connection.length > 0) {
-      let color = connectionColors[index];
-      let colorStr = `rgb(${color.join(",")})`;
-
-      svg += `\n  <!-- Connection ${
-        index + 1
-      } -->\n  <g stroke="${colorStr}" stroke-width="6" fill="${colorStr}">`;
-
-      // Add connection paths
-      for (let i = 0; i < connection.length - 1; i++) {
-        let d1 = connection[i];
-        let d2 = connection[i + 1];
-
-        // Calculate path data similar to drawTangentLines
-        let r1 = (d1.size * cellSize) / 2;
-        let r2 = (d2.size * cellSize) / 2;
-        let angle = atan2(d2.y - d1.y, d2.x - d1.x);
-        let perpAngle = angle + HALF_PI;
-
-        let x1a = d1.x + cos(perpAngle) * r1;
-        let y1a = d1.y + sin(perpAngle) * r1;
-        let x1b = d1.x - cos(perpAngle) * r1;
-        let y1b = d1.y - sin(perpAngle) * r1;
-        let x2a = d2.x + cos(perpAngle) * r2;
-        let y2a = d2.y + sin(perpAngle) * r2;
-        let x2b = d2.x - cos(perpAngle) * r2;
-        let y2b = d2.y - sin(perpAngle) * r2;
-
-        if (connectionStyles[index]) {
-          // Curved connection
-          let distance = p5.Vector.dist(
-            createVector(d1.x, d1.y),
-            createVector(d2.x, d2.y)
-          );
-          let controlDist = distance * 0.4;
-          let cp1ax = x1a + cos(angle) * controlDist;
-          let cp1ay = y1a + sin(angle) * controlDist;
-          let cp2ax = x2a - cos(angle) * controlDist;
-          let cp2ay = y2a - sin(angle) * controlDist;
-          let cp1bx = x1b + cos(angle) * controlDist;
-          let cp1by = y1b + sin(angle) * controlDist;
-          let cp2bx = x2b - cos(angle) * controlDist;
-          let cp2by = y2b - sin(angle) * controlDist;
-
-          svg += `\n    <path d="M ${x1a} ${y1a} C ${cp1ax} ${cp1ay} ${cp2ax} ${cp2ay} ${x2a} ${y2a} L ${x2b} ${y2b} C ${cp2bx} ${cp2by} ${cp1bx} ${cp1by} ${x1b} ${y1b} Z"/>`;
-        } else {
-          // Linear connection
-          svg += `\n    <path d="M ${x1a} ${y1a} L ${x2a} ${y2a} L ${x2b} ${y2b} L ${x1b} ${y1b} Z"/>`;
-        }
-      }
-
-      // Add dots
-      svg += `\n  </g>\n  <g stroke="${colorStr}" stroke-width="6" fill="white">`;
-      connection.forEach((dot) => {
-        let r = dot.size * cellSize;
-        svg += `\n    <circle cx="${dot.x}" cy="${dot.y}" r="${r / 2}"/>`;
-      });
-      svg += `\n  </g>`;
-    }
-  });
-
-  svg += `\n</svg>`;
-
-  // Create a Blob containing the SVG data
-  let blob = new Blob([svg], { type: "image/svg+xml" });
-  let url = URL.createObjectURL(blob);
-
-  // Create a temporary link and trigger download
-  let link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-function exportConsoleLog() {
-  let timestamp =
-    year() +
-    "-" +
-    month() +
-    "-" +
-    day() +
-    "_" +
-    hour() +
-    "-" +
-    minute() +
-    "-" +
-    second();
-  let filename = "console_log_" + timestamp + ".txt";
-
-  // Create text content
-  let content = "Dot Connections Log\n";
-  content += "=================\n\n";
-
-  // Add info for each connection
-  placedDots.forEach((dots, index) => {
-    if (dots.length > 0) {
-      content += `Connection ${index + 1}\n`;
-      content += `Style: ${connectionStyles[index] ? "Curved" : "Linear"}\n`;
-      content += `Color: rgb(${connectionColors[index].join(",")})\n`;
-      content += "Dots:\n";
-
-      dots.forEach((dot, dotIndex) => {
-        content += `  ${dotIndex + 1}: x=${Math.round(dot.x)}, y=${Math.round(
-          dot.y
-        )}, size=${dot.size}\n`;
-      });
-      content += "\n";
-    }
-  });
-
-  // Create a Blob containing the text data
-  let blob = new Blob([content], { type: "text/plain" });
-  let url = URL.createObjectURL(blob);
-
-  // Create a temporary link and trigger download
-  let link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 function toggleCurved() {

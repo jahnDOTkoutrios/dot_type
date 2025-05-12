@@ -177,7 +177,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .control-button:hover {
-  background: rgba(0, 102, 255, 0.2);
+  background: #0066ff;
+  color: #fff;
+  border: 1.5px solid #0066ff;
 }
 
 .size-control {
@@ -282,7 +284,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .dot-info {
-  margin-left: 15px;
+  margin-left: 22px;
   margin-bottom: 8px;
   line-height: 1.4;
 }
@@ -364,25 +366,23 @@ input[type="range"]::-webkit-slider-thumb:hover {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #fff;
-  border: 1.5px solid #0066ff;
+  background: rgba(0, 102, 255, 0.1);
+  border: 1px solid rgba(0, 102, 255, 0.2);
   color: #0066ff;
   font-family: 'G2-Erika-Mono', monospace;
-  font-size: 22px;
+  font-size: 14px;
   font-weight: normal;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  transition: background 0.2s, bottom 0.3s;
+  transition: all 0.3s ease;
 }
 
 .help-button:hover, .help-button:focus {
   background: #0066ff;
   color: #fff;
   border: 1.5px solid #0066ff;
-  box-shadow: 0 4px 12px rgba(0,102,255,0.12);
 }
 
 .shortcuts-info h3 {
@@ -548,7 +548,9 @@ body.dark-mode .control-button:hover,
 body.dark-mode .action-button:hover,
 body.dark-mode .size-button:hover,
 body.dark-mode .style-button:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: #fff;
+  color: #1a1a1a;
+  border: 1.5px solid #fff;
 }
 
 body.dark-mode .control-button.active,
@@ -571,14 +573,15 @@ body.dark-mode .connection-info {
 }
 
 body.dark-mode .help-button {
-  background: #1a1a1a;
-  border-color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
   color: #fff;
 }
 
 body.dark-mode .help-button:hover {
   background: #fff;
   color: #1a1a1a;
+  border: 1.5px solid #fff;
 }
 
 body.dark-mode .shortcuts-info {
