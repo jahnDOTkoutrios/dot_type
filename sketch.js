@@ -319,6 +319,75 @@ function generateWordSVG(word) {
   return svg;
 }
 
+function generateCombinedSVG() {
+  let letterSize = 740; // Size of each letter SVG
+  let gridCols = 6;
+  let gridRows = 7;
+  let padding = 20; // Padding between letters
+  let width = letterSize * gridCols + padding * (gridCols + 1);
+  let height = letterSize * gridRows + padding * (gridRows + 1);
+
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Define the grid layout
+  const grid = [
+    ["A", "B", "C", "D", "E", "F"],
+    ["G", "H", "I", "J", "K", "L"],
+    ["M", "N", "O", "P", "Q", "R"],
+    ["S", "T", "U", "V", "W", "X"],
+    ["Y", "Z", "0", "1", "2", "3"],
+    ["4", "5", "6", "7", "8", "9"],
+    [".", ",", "?", "!", "–", "&"],
+  ];
+
+  // Place each letter in the grid
+  for (let row = 0; row < gridRows; row++) {
+    for (let col = 0; col < gridCols; col++) {
+      let letter = grid[row][col];
+      let x = col * (letterSize + padding) + padding;
+      let y = row * (letterSize + padding) + padding;
+
+      // Save current state
+      let currentState = {
+        placedDots: JSON.parse(JSON.stringify(placedDots)),
+        connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+        connectionDotStyles: [...connectionDotStyles],
+        currentConnectionIndex: currentConnectionIndex,
+      };
+
+      // Load letter state
+      let state = letterDrawings[letter];
+      if (
+        state &&
+        state.placedDots.some((connection) => connection.length > 0)
+      ) {
+        placedDots = JSON.parse(JSON.stringify(state.placedDots));
+        connectionColors = JSON.parse(JSON.stringify(state.connectionColors));
+        connectionDotStyles = [...state.connectionDotStyles];
+        currentConnectionIndex = 0;
+
+        // Generate SVG for this letter
+        let letterSVG = generateSVG();
+
+        // Extract the content between the svg tags
+        let content = letterSVG.replace(/<svg[^>]*>|<\/svg>/g, "");
+
+        // Add the letter content with translation
+        svg += `<g transform="translate(${x}, ${y})">${content}</g>`;
+      }
+
+      // Restore previous state
+      placedDots = currentState.placedDots;
+      connectionColors = currentState.connectionColors;
+      connectionDotStyles = currentState.connectionDotStyles;
+      currentConnectionIndex = currentState.currentConnectionIndex;
+    }
+  }
+
+  svg += "</svg>";
+  return svg;
+}
+
 function exportZipWithSVGAndLog() {
   let timestamp =
     year() +
@@ -377,6 +446,10 @@ function exportZipWithSVGAndLog() {
     let wordSVG = generateWordSVG(previewText);
     zip.file(`word_preview_${timestamp}.svg`, wordSVG);
   }
+
+  // Add combined grid SVG
+  let combinedSVG = generateCombinedSVG();
+  zip.file(`combined_grid_${timestamp}.svg`, combinedSVG);
 
   // Generate and add the ZIP file
   zip.generateAsync({ type: "blob" }).then(function (blob) {
@@ -639,8 +712,8 @@ function generateLogContent(letter) {
 }
 
 function generateSVG() {
-  let width = 800;
-  let height = 800;
+  let width = 740; // canvasSize (700) + gridPadding*2 (20*2)
+  let height = 740; // canvasSize (700) + gridPadding*2 (20*2)
 
   // Calculate bounds of the design
   let minX = Infinity,
@@ -662,21 +735,50 @@ function generateSVG() {
     maxX = maxY = 1;
   }
 
-  // Calculate scale to fit in 800x800 with 100px padding
-  let designWidth = maxX - minX;
-  let designHeight = maxY - minY;
-  let padding = 100;
-  let scale = Math.min(
-    (width - padding * 2) / (designWidth || 1),
-    (height - padding * 2) / (designHeight || 1)
-  );
+  // Use a fixed scale based on the canvas size
+  let scale = 1; // Keep scale at 1 since we're using the exact size
 
   // Calculate offset to center the design
+  let designWidth = maxX - minX;
+  let designHeight = maxY - minY;
   let offsetX = (width - designWidth * scale) / 2 - minX * scale;
   let offsetY = (height - designHeight * scale) / 2 - minY * scale;
 
-  // Start SVG content (no background)
+  // Start SVG content
   let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Start grid group
+  svg += `<g id="grid">`;
+
+  // Add light grey background for the game board area
+  let gridPadding = 20;
+  let gridSize = canvasSize * scale;
+  let gridX = (width - gridSize) / 2;
+  let gridY = (height - gridSize) / 2;
+  svg += `<rect x="${gridX - gridPadding}" y="${gridY - gridPadding}" width="${
+    gridSize + gridPadding * 2
+  }" height="${gridSize + gridPadding * 2}" fill="${
+    isDarkMode ? "#232323" : "#fafafa"
+  }"/>`;
+
+  // Draw the dot grid
+  let dotRadius = cellSize * 0.16 * scale;
+  let yOffset = getGridYOffset() * scale;
+  for (let i = 0; i < gridCols; i++) {
+    for (let j = 0; j < gridRows; j++) {
+      let x = i * cellSize * scale + gridX + (cellSize * scale) / 2;
+      let y = j * cellSize * scale + gridY + (cellSize * scale) / 2;
+      svg += `<circle cx="${x}" cy="${y}" r="${dotRadius}" fill="${
+        isDarkMode ? "#c8c8c8" : "#000000"
+      }"/>`;
+    }
+  }
+
+  // End grid group
+  svg += `</g>`;
+
+  // Start design group
+  svg += `<g id="design">`;
 
   // Add connections and dots
   placedDots.forEach((connection, index) => {
@@ -731,6 +833,9 @@ function generateSVG() {
       });
     }
   });
+
+  // End design group
+  svg += `</g>`;
   svg += "</svg>";
   return svg;
 }
@@ -1578,6 +1683,8 @@ function keyPressed() {
       changeColor(COLORS.yellow);
     } else if (key === "7") {
       changeColor(COLORS.blue);
+    } else if (key === "8") {
+      randomizeAllColors();
     } else if (key === "q" || key === "Q") {
       nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
       updateStyleDisplay();
@@ -1598,7 +1705,9 @@ function keyPressed() {
     } else if (key === "o" || key === "O") {
       exportAsOTF();
     } else if (key === "r" || key === "R") {
-      generateRandomDesignsForAllLetters();
+      generateRandomDesignsForAllLetters(false); // Generate with filled dots
+    } else if (key === "t" || key === "T") {
+      generateRandomDesignsForAllLetters(true); // Generate with outlined dots
     }
   }
   return false;
@@ -1754,7 +1863,7 @@ function updateConsole() {
         dotInfo.html(
           `Dot ${String(dotIndex + 1).padStart(2, "0")}: ${colLetter}${String(
             rowNumber
-          ).padStart(2, "0")}, size = ${sizeLabel}`
+          ).padStart(2, "0")}, size=${sizeLabel}`
         );
         connectionDiv.child(dotInfo);
       });
@@ -2210,7 +2319,7 @@ function hideHoverPreview() {
 }
 
 // Add this function to generate random designs for all letters
-function generateRandomDesignsForAllLetters() {
+function generateRandomDesignsForAllLetters(outlinedOnly = false) {
   // Save current state for undo
   let currentState = {
     placedDots: JSON.parse(JSON.stringify(placedDots)),
@@ -2242,20 +2351,18 @@ function generateRandomDesignsForAllLetters() {
     for (let i = 0; i < numConnections; i++) {
       placedDots.push([]);
       connectionColors.push([...currentColor]);
-      connectionDotStyles.push(nextDotStyle);
+      connectionDotStyles.push(outlinedOnly ? "outlined" : "filled"); // Use outlined style if specified
 
       // Generate 2-4 dots per connection
       let numDots = floor(random(2, 5));
       for (let j = 0; j < numDots; j++) {
         let gx = int(random(0, gridCols)) * cellSize + padding + cellSize / 2;
         let gy = int(random(0, gridRows)) * cellSize + padding + cellSize / 2;
-        // Only use S, M, L sizes (indices 0-2)
-        let size = DOT_SIZES[floor(random(3))];
         placedDots[i].push({
           x: gx,
           y: gy,
-          size: size,
-          style: random() < 0.5 ? "filled" : "outlined",
+          size: DOT_SIZES[0], // Always use size S (index 0)
+          style: outlinedOnly ? "outlined" : "filled", // Use outlined style if specified
         });
       }
     }
@@ -2273,4 +2380,57 @@ function generateRandomDesignsForAllLetters() {
 
   // Restore the current letter's state
   loadLetterState(currentLetter);
+}
+
+function randomizeAllColors() {
+  // Save current state for undo
+  let currentState = {
+    placedDots: JSON.parse(JSON.stringify(placedDots)),
+    connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+    connectionDotStyles: [...connectionDotStyles],
+    currentConnectionIndex: currentConnectionIndex,
+  };
+  undoStack.push(currentState);
+  redoStack = [];
+
+  // Randomize colors for all letters
+  Object.keys(letterDrawings).forEach((letter) => {
+    let state = letterDrawings[letter];
+    if (state && state.placedDots.some((connection) => connection.length > 0)) {
+      // Generate new random colors for each connection
+      let newColors = state.connectionColors.map(() => {
+        return [floor(random(256)), floor(random(256)), floor(random(256))];
+      });
+
+      // Update the letter's colors
+      letterDrawings[letter].connectionColors = newColors;
+    }
+  });
+
+  // Update current letter's colors
+  if (placedDots.some((connection) => connection.length > 0)) {
+    connectionColors = connectionColors.map(() => {
+      return [floor(random(256)), floor(random(256)), floor(random(256))];
+    });
+  }
+
+  // Update current color to match the first non-empty connection's color
+  for (let i = 0; i < connectionColors.length; i++) {
+    if (placedDots[i].length > 0) {
+      currentColor = [...connectionColors[i]];
+      break;
+    }
+  }
+
+  // Update color button states
+  Object.entries(COLORS).forEach(([name, color]) => {
+    if (arraysEqual(color, currentColor)) {
+      colorButtons[name].addClass("active");
+    } else {
+      colorButtons[name].removeClass("active");
+    }
+  });
+
+  // Update letter indicators
+  updateAllLetterIndicators();
 }
