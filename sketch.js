@@ -2,7 +2,7 @@ let gridCols = 5;
 let gridRows = 5; // Fixed to 5 rows
 let cellSize;
 let padding = 250;
-const DOT_SIZES = [0.45, 0.95, 1.95, 2.95]; // S, M, L, XL (XL matches three M circles on grid)
+const DOT_SIZES = [0.35, 0.95, 1.95, 2.95]; // S, M, L, XL (XL matches three M circles on grid)
 let dotSize = 0.95; // Default to M
 let placedDots = []; // This will now be an array of arrays
 let connectionColors = []; // Array to store colors for each connection
@@ -98,6 +98,90 @@ const COLOR_PALETTES = [
 ];
 let currentPaletteIndex = 0;
 let COLORS = COLOR_PALETTES[currentPaletteIndex].colors;
+
+// Add these variables at the top with other global variables
+let currentGridX = 0; // Current position in the letter grid (0-9 for A-J)
+let currentGridY = 0; // Current position in the letter grid (0-3 for rows)
+
+// Add this function to convert grid position to letter
+function gridPositionToLetter(x, y) {
+  const letters = [
+    ["A", "B", "C"],
+    ["D", "E", "F"],
+    ["G", "H", "I"],
+    ["J", "K", "L"],
+    ["M", "N", "O"],
+    ["P", "Q", "R"],
+    ["S", "T", "U"],
+    ["V", "W", "X"],
+    ["Y", "Z", "0"],
+    ["1", "2", "3"],
+    ["4", "5", "6"],
+    ["7", "8", "9"],
+    [".", ",", "?"],
+    ["!", "–", "&"],
+  ];
+  return letters[y][x];
+}
+
+// Add this function to handle grid navigation
+function navigateGrid(dx, dy) {
+  let newX = currentGridX + dx;
+  let newY = currentGridY + dy;
+
+  // Get the current grid dimensions
+  const letters = [
+    ["A", "B", "C"],
+    ["D", "E", "F"],
+    ["G", "H", "I"],
+    ["J", "K", "L"],
+    ["M", "N", "O"],
+    ["P", "Q", "R"],
+    ["S", "T", "U"],
+    ["V", "W", "X"],
+    ["Y", "Z", "0"],
+    ["1", "2", "3"],
+    ["4", "5", "6"],
+    ["7", "8", "9"],
+    [".", ",", "?"],
+    ["!", "–", "&"],
+  ];
+
+  // Handle horizontal wrapping
+  if (dx !== 0) {
+    if (newX < 0) {
+      // Wrap to the end of the previous row
+      newY = (newY - 1 + letters.length) % letters.length;
+      newX = letters[newY].length - 1;
+    } else if (newX >= letters[newY].length) {
+      // Wrap to the start of the next row
+      newY = (newY + 1) % letters.length;
+      newX = 0;
+    }
+  } else {
+    // For vertical movement, just wrap around
+    newY = (newY + letters.length) % letters.length;
+  }
+
+  // Only update if position changed
+  if (newX !== currentGridX || newY !== currentGridY) {
+    currentGridX = newX;
+    currentGridY = newY;
+
+    // Get the letter at the new position
+    let newLetter = gridPositionToLetter(currentGridX, currentGridY);
+
+    // Save current state and load new letter
+    saveCurrentLetterState();
+    currentLetter = newLetter;
+    loadLetterState(newLetter);
+
+    // Update UI
+    letterButtons.forEach((b) => b.removeClass("active"));
+    let btn = select(`#letter-${newLetter.replace(/[^a-zA-Z0-9]/g, "\\$&")}`);
+    if (btn) btn.addClass("active");
+  }
+}
 
 function generateWordSVG(word) {
   let width = 800;
@@ -312,6 +396,22 @@ function exportAsOTF() {
   // Create an array to store all glyphs
   let glyphs = [];
 
+  // Add .notdef glyph first
+  let notdefPath = new opentype.Path();
+  // Create a simple square for .notdef
+  notdefPath.moveTo(100, 100);
+  notdefPath.lineTo(900, 100);
+  notdefPath.lineTo(900, 900);
+  notdefPath.lineTo(100, 900);
+  notdefPath.closePath();
+
+  let notdefGlyph = new opentype.Glyph({
+    name: ".notdef",
+    unicode: 0,
+    advanceWidth: 1000,
+    path: notdefPath,
+  });
+  glyphs.push(notdefGlyph);
   // Convert each letter's dots to a path
   Object.entries(letterDrawings).forEach(([letter, state]) => {
     if (state.placedDots.some((connection) => connection.length > 0)) {
@@ -341,9 +441,9 @@ function exportAsOTF() {
 
           // Convert coordinates to font space (0-1000)
           let x1 = map(d1.x, padding, width - padding, 100, 900);
-          let y1 = map(d1.y, padding, height - padding, 100, 900);
+          let y1 = map(d1.y, padding, height - padding, 900, 100) - 122; // Invert y mapping and subtract 122
           let x2 = map(d2.x, padding, width - padding, 100, 900);
-          let y2 = map(d2.y, padding, height - padding, 100, 900);
+          let y2 = map(d2.y, padding, height - padding, 900, 100) - 122; // Invert y mapping and subtract 122
 
           let r1 = map(d1.size * cellSize, 0, cellSize * 2, 20, 100);
           let r2 = map(d2.size * cellSize, 0, cellSize * 2, 20, 100);
@@ -400,87 +500,50 @@ function exportAsOTF() {
           path.closePath();
         }
 
-        // Draw the dots
+        // Draw the dots (only outer circles)
         connection.forEach((dot) => {
           // Convert coordinates to font space (0-1000)
           let x = map(dot.x, padding, width - padding, 100, 900);
-          let y = map(dot.y, padding, height - padding, 100, 900);
+          let y = map(dot.y, padding, height - padding, 900, 100) - 122; // Invert y mapping and subtract 122
           let radius = map(dot.size * cellSize, 0, cellSize * 2, 20, 100);
 
           // Create circle using Bézier curves
           // The magic number 0.552284749831 is used to create a perfect circle with Bézier curves
           const c = 0.552284749831;
 
-          // Draw outer circle clockwise
-          path.moveTo(x + radius, y);
+          // Draw outer circle counter-clockwise starting from top
+          path.moveTo(x, y - radius);
           path.bezierCurveTo(
-            x + radius,
+            x - radius * c,
+            y - radius,
+            x - radius,
+            y - radius * c,
+            x - radius,
+            y
+          );
+          path.bezierCurveTo(
+            x - radius,
             y + radius * c,
-            x + radius * c,
+            x - radius * c,
             y + radius,
             x,
             y + radius
           );
           path.bezierCurveTo(
-            x - radius * c,
+            x + radius * c,
             y + radius,
-            x - radius,
+            x + radius,
             y + radius * c,
-            x - radius,
+            x + radius,
             y
           );
           path.bezierCurveTo(
-            x - radius,
+            x + radius,
             y - radius * c,
-            x - radius * c,
+            x + radius * c,
             y - radius,
             x,
             y - radius
-          );
-          path.bezierCurveTo(
-            x + radius * c,
-            y - radius,
-            x + radius,
-            y - radius * c,
-            x + radius,
-            y
-          );
-          path.closePath();
-
-          // Draw inner circle counter-clockwise
-          let innerRadius = radius * 0.6; // Inner circle is 60% of outer circle
-          path.moveTo(x + innerRadius, y);
-          path.bezierCurveTo(
-            x + innerRadius,
-            y - innerRadius * c,
-            x + innerRadius * c,
-            y - innerRadius,
-            x,
-            y - innerRadius
-          );
-          path.bezierCurveTo(
-            x - innerRadius * c,
-            y - innerRadius,
-            x - innerRadius,
-            y - innerRadius * c,
-            x - innerRadius,
-            y
-          );
-          path.bezierCurveTo(
-            x - innerRadius,
-            y + innerRadius * c,
-            x - innerRadius * c,
-            y + innerRadius,
-            x,
-            y + innerRadius
-          );
-          path.bezierCurveTo(
-            x + innerRadius * c,
-            y + innerRadius,
-            x + innerRadius,
-            y + innerRadius * c,
-            x + innerRadius,
-            y
           );
           path.closePath();
         });
@@ -824,7 +887,7 @@ function setup() {
     connectionColors = [[...currentColor]];
     connectionDotStyles = [nextDotStyle];
     currentConnectionIndex = 0;
-    saveCurrentLetterState(); // Save state after clearing
+    saveStateForUndo(); // Save state after clearing
     updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
   });
   actionControl.child(clearButton);
@@ -1430,55 +1493,113 @@ function keyPressed() {
     return false;
   }
 
-  // Process hotkeys only when text input is not focused
-  if (key === "C" || key === "c") {
-    placedDots = [[]];
-    connectionColors = [[...currentColor]];
-    connectionDotStyles = [nextDotStyle];
-    currentConnectionIndex = 0;
-    saveStateForUndo(); // Save state after clearing
-    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
-  } else if (key === "n" || key === "N") {
-    currentConnectionIndex++;
-    placedDots.push([]);
-    connectionColors.push([...currentColor]);
-    connectionDotStyles.push(nextDotStyle);
-    saveStateForUndo(); // Save state after new connection
-  } else if (key === "1") {
-    dotSize = DOT_SIZES[0]; // S
-    updateSizeDisplay();
-  } else if (key === "2") {
-    dotSize = DOT_SIZES[1]; // M
-    updateSizeDisplay();
-  } else if (key === "3") {
-    dotSize = DOT_SIZES[2]; // L
-    updateSizeDisplay();
-  } else if (key === "x" || key === "X") {
-    dotSize = DOT_SIZES[3]; // XL
-    updateSizeDisplay();
-  } else if (key === "5") {
-    changeColor(COLORS.red);
-  } else if (key === "6") {
-    changeColor(COLORS.yellow);
-  } else if (key === "7") {
-    changeColor(COLORS.blue);
-  } else if (key === "q" || key === "Q") {
-    nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
-    updateStyleDisplay();
-  } else if (key === "e" || key === "E") {
-    nextDotStyle = "eraser";
-    updateStyleDisplay();
-  } else if (key === "k" || key === "K") {
-    isDarkMode = !isDarkMode;
-    document.body.classList.toggle("dark-mode");
-  } else if (key === "s" || key === "S") {
-    cycleColorPalette();
-  } else if (key === "p" || key === "P") {
-    saveImageWithTimestamp();
-  } else if (key === "z" || key === "Z") {
-    undo();
-  } else if (key === "y" || key === "Y") {
-    redo();
+  // Handle arrow keys for grid navigation
+  if (keyCode === LEFT_ARROW) {
+    navigateGrid(-1, 0);
+    return false;
+  } else if (keyCode === RIGHT_ARROW) {
+    navigateGrid(1, 0);
+    return false;
+  } else if (keyCode === UP_ARROW) {
+    navigateGrid(0, -1);
+    return false;
+  } else if (keyCode === DOWN_ARROW) {
+    navigateGrid(0, 1);
+    return false;
+  }
+
+  // Process other hotkeys only when text input is not focused
+  if (keyIsDown(SHIFT)) {
+    // Handle shift + letter/number/punctuation hotkeys
+    let letter = key.toUpperCase();
+
+    // Map shifted number keys to their actual numbers (Swiss keyboard layout)
+    const shiftedNumberMap = {
+      "+": "1",
+      '"': "2",
+      "*": "3",
+      ç: "4",
+      "%": "5",
+      "&": "6",
+      "/": "7",
+      "(": "8",
+      ")": "9",
+      "=": "0",
+    };
+
+    // Check if it's a valid character (A-Z, 0-9, or punctuation)
+    let validKey =
+      /^[A-Z.,?!&–]$/.test(letter) ||
+      (key >= "0" && key <= "9") || // Handle number keys directly
+      Object.keys(shiftedNumberMap).includes(key); // Handle shifted number keys
+
+    if (validKey) {
+      // For shifted numbers, convert to actual number
+      let selectedChar = shiftedNumberMap[key] || letter;
+      saveCurrentLetterState();
+      currentLetter = selectedChar;
+      loadLetterState(selectedChar);
+      letterButtons.forEach((b) => b.removeClass("active"));
+      let btn = select(
+        `#letter-${selectedChar.replace(/[^a-zA-Z0-9]/g, "\\$&")}`
+      );
+      if (btn) btn.addClass("active");
+    }
+  } else {
+    // Only process other hotkeys when shift is not pressed
+    if (key === "C" || key === "c") {
+      placedDots = [[]];
+      connectionColors = [[...currentColor]];
+      connectionDotStyles = [nextDotStyle];
+      currentConnectionIndex = 0;
+      saveStateForUndo(); // Save state after clearing
+      updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
+    } else if (key === "n" || key === "N") {
+      currentConnectionIndex++;
+      placedDots.push([]);
+      connectionColors.push([...currentColor]);
+      connectionDotStyles.push(nextDotStyle);
+      saveStateForUndo(); // Save state after new connection
+    } else if (key === "1") {
+      dotSize = DOT_SIZES[0]; // S
+      updateSizeDisplay();
+    } else if (key === "2") {
+      dotSize = DOT_SIZES[1]; // M
+      updateSizeDisplay();
+    } else if (key === "3") {
+      dotSize = DOT_SIZES[2]; // L
+      updateSizeDisplay();
+    } else if (key === "x" || key === "X") {
+      dotSize = DOT_SIZES[3]; // XL
+      updateSizeDisplay();
+    } else if (key === "5") {
+      changeColor(COLORS.red);
+    } else if (key === "6") {
+      changeColor(COLORS.yellow);
+    } else if (key === "7") {
+      changeColor(COLORS.blue);
+    } else if (key === "q" || key === "Q") {
+      nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
+      updateStyleDisplay();
+    } else if (key === "e" || key === "E") {
+      nextDotStyle = "eraser";
+      updateStyleDisplay();
+    } else if (key === "k" || key === "K") {
+      isDarkMode = !isDarkMode;
+      document.body.classList.toggle("dark-mode");
+    } else if (key === "s" || key === "S") {
+      cycleColorPalette();
+    } else if (key === "p" || key === "P") {
+      saveImageWithTimestamp();
+    } else if (key === "z" || key === "Z") {
+      undo();
+    } else if (key === "y" || key === "Y") {
+      redo();
+    } else if (key === "o" || key === "O") {
+      exportAsOTF();
+    } else if (key === "r" || key === "R") {
+      generateRandomDesignsForAllLetters();
+    }
   }
   return false;
 }
@@ -1866,6 +1987,33 @@ function loadLetterState(letter) {
       colorButtons[name].removeClass("active");
     }
   });
+
+  // Update grid position based on the letter
+  const letters = [
+    ["A", "B", "C"],
+    ["D", "E", "F"],
+    ["G", "H", "I"],
+    ["J", "K", "L"],
+    ["M", "N", "O"],
+    ["P", "Q", "R"],
+    ["S", "T", "U"],
+    ["V", "W", "X"],
+    ["Y", "Z", "0"],
+    ["1", "2", "3"],
+    ["4", "5", "6"],
+    ["7", "8", "9"],
+    [".", ",", "?"],
+    ["!", "–", "&"],
+  ];
+
+  for (let y = 0; y < letters.length; y++) {
+    let x = letters[y].indexOf(letter);
+    if (x !== -1) {
+      currentGridX = x;
+      currentGridY = y;
+      break;
+    }
+  }
 }
 
 function hasLetterDrawing(letter) {
@@ -1874,7 +2022,9 @@ function hasLetterDrawing(letter) {
 }
 
 function updateLetterButtonIndicator(letter) {
-  let btn = select(`#letter-${letter}`);
+  // Escape special characters for CSS selector
+  let escapedLetter = letter.replace(/[^a-zA-Z0-9]/g, "\\$&");
+  let btn = select(`#letter-${escapedLetter}`);
   if (btn) {
     if (hasLetterDrawing(letter)) {
       btn.addClass("has-drawing");
@@ -2057,4 +2207,70 @@ function showHoverPreview(letter, button) {
 
 function hideHoverPreview() {
   hoverPreviewDiv.style("display", "none");
+}
+
+// Add this function to generate random designs for all letters
+function generateRandomDesignsForAllLetters() {
+  // Save current state for undo
+  let currentState = {
+    placedDots: JSON.parse(JSON.stringify(placedDots)),
+    connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+    connectionDotStyles: [...connectionDotStyles],
+    currentConnectionIndex: currentConnectionIndex,
+  };
+  undoStack.push(currentState);
+  redoStack = [];
+
+  // Generate random designs for each letter
+  Object.keys(letterDrawings).forEach((letter) => {
+    // Save current letter state
+    let letterState = {
+      placedDots: JSON.parse(JSON.stringify(placedDots)),
+      connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+      connectionDotStyles: [...connectionDotStyles],
+      currentConnectionIndex: currentConnectionIndex,
+    };
+
+    // Clear existing connections
+    placedDots = [[]];
+    connectionColors = [[...currentColor]];
+    connectionDotStyles = [nextDotStyle];
+    currentConnectionIndex = 0;
+
+    // Generate 2-3 random connections
+    let numConnections = floor(random(2, 4));
+    for (let i = 0; i < numConnections; i++) {
+      placedDots.push([]);
+      connectionColors.push([...currentColor]);
+      connectionDotStyles.push(nextDotStyle);
+
+      // Generate 2-4 dots per connection
+      let numDots = floor(random(2, 5));
+      for (let j = 0; j < numDots; j++) {
+        let gx = int(random(0, gridCols)) * cellSize + padding + cellSize / 2;
+        let gy = int(random(0, gridRows)) * cellSize + padding + cellSize / 2;
+        // Only use S, M, L sizes (indices 0-2)
+        let size = DOT_SIZES[floor(random(3))];
+        placedDots[i].push({
+          x: gx,
+          y: gy,
+          size: size,
+          style: random() < 0.5 ? "filled" : "outlined",
+        });
+      }
+    }
+
+    // Save the random design to the letter
+    letterDrawings[letter] = {
+      placedDots: JSON.parse(JSON.stringify(placedDots)),
+      connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+      connectionDotStyles: [...connectionDotStyles],
+    };
+
+    // Update the letter button indicator
+    updateLetterButtonIndicator(letter);
+  });
+
+  // Restore the current letter's state
+  loadLetterState(currentLetter);
 }
