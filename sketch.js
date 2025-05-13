@@ -2,12 +2,14 @@ let gridCols = 5;
 let gridRows = 5; // Fixed to 5 rows
 let cellSize;
 let padding = 250;
-const DOT_SIZES = [0.45, 0.95, 1.95]; // S, M, L (L adjusted for edge-to-edge match)
+const DOT_SIZES = [0.45, 0.95, 1.95, 2.95]; // S, M, L, XL (XL matches three M circles on grid)
 let dotSize = 0.95; // Default to M
 let placedDots = []; // This will now be an array of arrays
 let connectionColors = []; // Array to store colors for each connection
 let currentConnectionIndex = 0; // Index to track the current connection
 let currentColor = [0, 0, 255]; // Current color (blue by default)
+let undoStack = []; // Stack for undo operations
+let redoStack = []; // Stack for redo operations
 let gridToggleButton; // Button for toggling grid size
 let colorButtons = {}; // Object to store color buttons
 let sizeDisplay; // Display for dot size
@@ -15,7 +17,7 @@ let consolePanel;
 let maxGridDim = 7; // The largest grid dimension (for 5x7)
 let canvasSize = 700; // The main drawing area size (without padding)
 let sizeButtons = [];
-let nextDotStyle = "outlined"; // 'outlined' or 'filled'
+let nextDotStyle = "outlined"; // 'outlined', 'filled', or 'eraser'
 let connectionDotStyles = []; // Array to store dot styles for each connection
 let styleButtons = [];
 let isDarkMode = false;
@@ -25,6 +27,7 @@ let letterButtons = [];
 let letterDrawings = {}; // Store drawings for each letter
 let isTextInputFocused = false;
 let isLettersVisible = false; // Start with letters hidden
+let hoverPreviewDiv = null; // Add this line for hover preview
 
 // Define available colors
 const COLOR_PALETTES = [
@@ -96,6 +99,142 @@ const COLOR_PALETTES = [
 let currentPaletteIndex = 0;
 let COLORS = COLOR_PALETTES[currentPaletteIndex].colors;
 
+function generateWordSVG(word) {
+  let width = 800;
+  let height = 800;
+  let previewScale = 0.12;
+  let letterSpacing = 90;
+  let dotSpacing = 12;
+  let y = height / 2;
+
+  // Calculate total width of the word
+  let totalWidth = 0;
+  for (let i = 0; i < word.length; i++) {
+    if (word[i] === ".") {
+      totalWidth += dotSpacing;
+    } else {
+      totalWidth += letterSpacing;
+    }
+  }
+  let x = (width - totalWidth) / 2;
+
+  // For vertical centering, find the max/min y of all letters
+  let minY = Infinity,
+    maxY = -Infinity;
+  for (let i = 0; i < word.length; i++) {
+    let letter = word[i];
+    if (letter !== "." && letterDrawings[letter]) {
+      let state = letterDrawings[letter];
+      state.placedDots.forEach((connection) => {
+        connection.forEach((dot) => {
+          let r = dot.size * cellSize * previewScale;
+          minY = Math.min(minY, dot.y * previewScale - r / 2);
+          maxY = Math.max(maxY, dot.y * previewScale + r / 2);
+        });
+      });
+    }
+  }
+  if (!isFinite(minY)) {
+    minY = 0;
+    maxY = height;
+  }
+  let wordHeight = maxY - minY;
+  let yOffset = (height - wordHeight) / 2 - minY;
+
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+  for (let i = 0; i < word.length; i++) {
+    let letter = word[i];
+    if (letter === ".") {
+      let cx = x + 4;
+      let cy = height / 2 + 2;
+      svg += `<circle cx="${cx}" cy="${cy}" r="4" fill="#000"/>`;
+      x += dotSpacing;
+    } else {
+      let state = letterDrawings[letter];
+      if (state) {
+        // Calculate bounds for this letter
+        let minX = Infinity,
+          minYL = Infinity,
+          maxXL = -Infinity,
+          maxYL = -Infinity;
+        state.placedDots.forEach((connection) => {
+          connection.forEach((dot) => {
+            let r = dot.size * cellSize;
+            minX = Math.min(minX, dot.x - r / 2);
+            minYL = Math.min(minYL, dot.y - r / 2);
+            maxXL = Math.max(maxXL, dot.x + r / 2);
+            maxYL = Math.max(maxYL, dot.y + r / 2);
+          });
+        });
+        let scale = previewScale;
+        let offsetX = x - minX * scale;
+        let offsetY = yOffset;
+        // Draw each connection
+        for (let j = 0; j < state.placedDots.length; j++) {
+          let connection = state.placedDots[j];
+          if (connection.length > 0) {
+            // Draw connections
+            for (let k = 0; k < connection.length - 1; k++) {
+              let d1 = connection[k];
+              let d2 = connection[k + 1];
+              let color = state.connectionColors[j];
+              let x1 = d1.x * scale + offsetX;
+              let y1 = d1.y * scale + offsetY;
+              let x2 = d2.x * scale + offsetX;
+              let y2 = d2.y * scale + offsetY;
+              let r1 = (d1.size * cellSize * scale) / 2;
+              let r2 = (d2.size * cellSize * scale) / 2;
+              let dx = x2 - x1;
+              let dy = y2 - y1;
+              let distance = Math.sqrt(dx * dx + dy * dy);
+              let angle = Math.atan2(dy, dx);
+              let tangentAngle = Math.acos((r1 - r2) / distance);
+              let angle1 = angle + tangentAngle;
+              let angle2 = angle - tangentAngle;
+              let x1a = x1 + r1 * Math.cos(angle1);
+              let y1a = y1 + r1 * Math.sin(angle1);
+              let x1b = x1 + r1 * Math.cos(angle2);
+              let y1b = y1 + r1 * Math.sin(angle2);
+              let x2a = x2 + r2 * Math.cos(angle1);
+              let y2a = y2 + r2 * Math.sin(angle1);
+              let x2b = x2 + r2 * Math.cos(angle2);
+              let y2b = y2 + r2 * Math.sin(angle2);
+              svg += `<path d="M ${x1a} ${y1a} L ${x2a} ${y2a} L ${x2b} ${y2b} L ${x1b} ${y1b} Z" fill="rgb(${color.join(
+                ","
+              )})"/>`;
+            }
+            // Draw dots
+            for (let dot of connection) {
+              let r = dot.size * cellSize * scale;
+              let cx = dot.x * scale + offsetX;
+              let cy = dot.y * scale + offsetY;
+              let color = state.connectionColors[j];
+              if (dot.style === "filled") {
+                svg += `<circle cx="${cx}" cy="${cy}" r="${
+                  r / 2
+                }" fill="rgb(${color.join(",")})"/>`;
+              } else {
+                svg += `<circle cx="${cx}" cy="${cy}" r="${
+                  r / 2
+                }" fill="rgb(${color.join(",")})"/>`;
+                svg += `<circle cx="${cx}" cy="${cy}" r="${
+                  (r - 16 * scale) / 2
+                }" fill="#ffffff"/>`;
+              }
+            }
+          }
+        }
+        x += letterSpacing;
+      } else {
+        x += letterSpacing;
+      }
+    }
+  }
+  svg += "</svg>";
+  return svg;
+}
+
 function exportZipWithSVGAndLog() {
   let timestamp =
     year() +
@@ -148,6 +287,12 @@ function exportZipWithSVGAndLog() {
       currentConnectionIndex = currentState.currentConnectionIndex;
     }
   });
+
+  // Add word SVG if previewText is not empty
+  if (previewText && previewText.length > 0) {
+    let wordSVG = generateWordSVG(previewText);
+    zip.file(`word_preview_${timestamp}.svg`, wordSVG);
+  }
 
   // Generate and add the ZIP file
   zip.generateAsync({ type: "blob" }).then(function (blob) {
@@ -394,7 +539,7 @@ function exportAsOTF() {
 }
 
 function generateLogContent(letter) {
-  let sizeLabels = ["S", "M", "L"];
+  let sizeLabels = ["S", "M", "L", "XL"];
   let content = `Dot Connections Log for Letter ${letter}\n`;
   content += "=================\n\n";
 
@@ -448,24 +593,27 @@ function generateSVG() {
     });
   });
 
-  // Calculate scale to fit in 800x800 with padding
+  // If no dots, use default bounds
+  if (!isFinite(minX)) {
+    minX = minY = 0;
+    maxX = maxY = 1;
+  }
+
+  // Calculate scale to fit in 800x800 with 100px padding
   let designWidth = maxX - minX;
   let designHeight = maxY - minY;
-  let padding = 100; // Padding around the design
+  let padding = 100;
   let scale = Math.min(
-    (width - padding * 2) / designWidth,
-    (height - padding * 2) / designHeight
+    (width - padding * 2) / (designWidth || 1),
+    (height - padding * 2) / (designHeight || 1)
   );
 
   // Calculate offset to center the design
   let offsetX = (width - designWidth * scale) / 2 - minX * scale;
   let offsetY = (height - designHeight * scale) / 2 - minY * scale;
 
-  // Start SVG content
-  let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`;
-
-  // Add white background
-  svg += `<rect width="${width}" height="${height}" fill="#ffffff"/>`;
+  // Start SVG content (no background)
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
 
   // Add connections and dots
   placedDots.forEach((connection, index) => {
@@ -475,48 +623,36 @@ function generateSVG() {
         let d1 = connection[i];
         let d2 = connection[i + 1];
         let color = connectionColors[index];
-
-        // Scale and center coordinates
         let x1 = d1.x * scale + offsetX;
         let y1 = d1.y * scale + offsetY;
         let x2 = d2.x * scale + offsetX;
         let y2 = d2.y * scale + offsetY;
-
         let r1 = (d1.size * cellSize * scale) / 2;
         let r2 = (d2.size * cellSize * scale) / 2;
-
-        // Calculate tangent points
         let dx = x2 - x1;
         let dy = y2 - y1;
         let distance = Math.sqrt(dx * dx + dy * dy);
         let angle = Math.atan2(dy, dx);
         let tangentAngle = Math.acos((r1 - r2) / distance);
-
         let angle1 = angle + tangentAngle;
         let angle2 = angle - tangentAngle;
-
         let x1a = x1 + r1 * Math.cos(angle1);
         let y1a = y1 + r1 * Math.sin(angle1);
         let x1b = x1 + r1 * Math.cos(angle2);
         let y1b = y1 + r1 * Math.sin(angle2);
-
         let x2a = x2 + r2 * Math.cos(angle1);
         let y2a = y2 + r2 * Math.sin(angle1);
         let x2b = x2 + r2 * Math.cos(angle2);
         let y2b = y2 + r2 * Math.sin(angle2);
-
-        // Draw the connection
         svg += `<path d="M ${x1a} ${y1a} L ${x2a} ${y2a} L ${x2b} ${y2b} L ${x1b} ${y1b} Z" fill="rgb(${color.join(
           ","
         )})"/>`;
       }
-
       // Draw dots
       connection.forEach((dot) => {
         let r = dot.size * cellSize * scale;
         let x = dot.x * scale + offsetX;
         let y = dot.y * scale + offsetY;
-
         if (dot.style === "filled") {
           svg += `<circle cx="${x}" cy="${y}" r="${
             r / 2
@@ -532,7 +668,6 @@ function generateSVG() {
       });
     }
   });
-
   svg += "</svg>";
   return svg;
 }
@@ -609,7 +744,7 @@ function setup() {
   let sizeControl = createDiv("");
   sizeControl.class("size-control");
   sizeControl.style("width", "120px");
-  const sizeLabels = ["S", "M", "L"];
+  const sizeLabels = ["S", "M", "L"]; // Removed XL from UI
   sizeButtons = [];
   sizeLabels.forEach((label, idx) => {
     let btn = createButton(label);
@@ -625,19 +760,28 @@ function setup() {
   sizeButtons[getDotSizeIndex(dotSize)]?.addClass("active");
   controlButtonsContainer.child(sizeControl);
 
-  // Style buttons (Outlined, Filled) in a wrapper with width 120px
+  // Style buttons (Outlined, Filled, Eraser) in a wrapper with width 120px
   let styleControl = createDiv("");
   styleControl.class("style-control");
   styleControl.style("width", "120px");
-  const styleLabels = ["○", "●"];
+  const styleLabels = ["○", "●", "◌"]; // Changed the eraser symbol to ◌
   styleButtons = [];
   styleLabels.forEach((label, idx) => {
     let btn = createButton(label);
     btn.class("style-button");
+    btn.style("width", "40px"); // Fixed width
+    btn.style("height", "40px"); // Fixed height
+    btn.style("display", "flex"); // Use flexbox
+    btn.style("align-items", "center"); // Center vertically
+    btn.style("justify-content", "center"); // Center horizontally
+    btn.style("padding", "0"); // Remove padding
+    btn.style("line-height", "1"); // Reset line height
+    if (label === "◌") {
+      btn.style("font-weight", "900"); // Make the dotted circle bolder
+    }
     btn.mousePressed(() => {
-      nextDotStyle = ["outlined", "filled"][idx];
+      nextDotStyle = ["outlined", "filled", "eraser"][idx];
       updateStyleDisplay();
-      saveCurrentLetterState(); // Save state after style change
     });
     styleButtons.push(btn);
     styleControl.child(btn);
@@ -667,19 +811,8 @@ function setup() {
   // Undo (←)
   let undoButton = createButton("←");
   undoButton.class("action-button");
-  undoButton.attribute("title", "Undo (Left Arrow)");
-  undoButton.mousePressed(() => {
-    if (placedDots[currentConnectionIndex].length > 0) {
-      placedDots[currentConnectionIndex].pop();
-    } else if (currentConnectionIndex > 0) {
-      placedDots.pop();
-      connectionColors.pop();
-      connectionDotStyles.pop();
-      currentConnectionIndex--;
-    }
-    saveCurrentLetterState(); // Save state after undo
-    updateLetterButtonIndicator(currentLetter); // Update indicator after undo
-  });
+  undoButton.attribute("title", "Undo (Z)");
+  undoButton.mousePressed(undo);
   actionControl.child(undoButton);
 
   // Clear (×)
@@ -756,6 +889,19 @@ function setup() {
     abcButton.html(isLettersVisible ? "ABC ↑" : "ABC ↓");
   });
 
+  // Create hover preview div
+  hoverPreviewDiv = createDiv("");
+  hoverPreviewDiv.class("hover-preview");
+  hoverPreviewDiv.style("display", "none");
+  hoverPreviewDiv.style("position", "absolute");
+  hoverPreviewDiv.style("background", "white");
+  hoverPreviewDiv.style("border", "1.5px solid rgba(0, 102, 255, 0.2)");
+  hoverPreviewDiv.style("padding", "10px");
+  hoverPreviewDiv.style("border-radius", "4px");
+  hoverPreviewDiv.style("box-shadow", "0 2px 4px rgba(0, 102, 255, 0.2)");
+  hoverPreviewDiv.style("z-index", "1000");
+  hoverPreviewDiv.style("pointer-events", "none");
+
   // Create letter buttons A-Z
   for (let i = 0; i < 26; i++) {
     let letter = String.fromCharCode(65 + i);
@@ -775,11 +921,14 @@ function setup() {
       letterButtons.forEach((b) => b.removeClass("active"));
       btn.addClass("active");
     });
+    // Add hover events
+    btn.mouseOver(() => showHoverPreview(letter, btn));
+    btn.mouseOut(() => hideHoverPreview());
     letterButtons.push(btn);
     letterSelector.child(btn);
   }
 
-  // Add numbers 0-9
+  // Add numbers 0-9 with hover events
   for (let i = 0; i < 10; i++) {
     let number = i.toString();
     let btn = createButton(number);
@@ -798,11 +947,14 @@ function setup() {
       letterButtons.forEach((b) => b.removeClass("active"));
       btn.addClass("active");
     });
+    // Add hover events
+    btn.mouseOver(() => showHoverPreview(number, btn));
+    btn.mouseOut(() => hideHoverPreview());
     letterButtons.push(btn);
     letterSelector.child(btn);
   }
 
-  // Add punctuation buttons
+  // Add punctuation buttons with hover events
   const punctuation = [".", ",", "?", "!", "–", "&"];
   punctuation.forEach((punct) => {
     let btn = createButton(punct);
@@ -821,6 +973,9 @@ function setup() {
       letterButtons.forEach((b) => b.removeClass("active"));
       btn.addClass("active");
     });
+    // Add hover events
+    btn.mouseOver(() => showHoverPreview(punct, btn));
+    btn.mouseOut(() => hideHoverPreview());
     letterButtons.push(btn);
     letterSelector.child(btn);
   });
@@ -1007,16 +1162,16 @@ function drawTangentLines(d1, d2, color) {
   let angle2 = angle - tangentAngle;
 
   // Calculate the tangent points on the larger circle
-  let x1a = x1 + r1 * Math.cos(angle1);
-  let y1a = y1 + r1 * Math.sin(angle1);
-  let x1b = x1 + r1 * Math.cos(angle2);
-  let y1b = y1 + r1 * Math.sin(angle2);
+  let x1a = x1 + r1 * cos(angle1);
+  let y1a = y1 + r1 * sin(angle1);
+  let x1b = x1 + r1 * cos(angle2);
+  let y1b = y1 + r1 * sin(angle2);
 
   // Calculate the tangent points on the smaller circle
-  let x2a = x2 + r2 * Math.cos(angle1);
-  let y2a = y2 + r2 * Math.sin(angle1);
-  let x2b = x2 + r2 * Math.cos(angle2);
-  let y2b = y2 + r2 * Math.sin(angle2);
+  let x2a = x2 + r2 * cos(angle1);
+  let y2a = y2 + r2 * sin(angle1);
+  let x2b = x2 + r2 * cos(angle2);
+  let y2b = y2 + r2 * sin(angle2);
 
   // Swap points if we swapped the circles
   if (swap) {
@@ -1045,103 +1200,116 @@ function drawDot(x, y, size, color, style) {
   if (style === "filled") {
     fill(color);
     ellipse(x, y, r);
-  } else {
+  } else if (style === "outlined") {
     fill(color);
     ellipse(x, y, r);
     fill(255);
     ellipse(x, y, r - 16);
   }
+  // No need to draw anything for eraser style
 }
 
 function drawPreview() {
   let [gx, gy] = getGridMousePos();
   if (gx !== null && gy !== null) {
-    // Draw preview tangent lines if there is at least one dot placed
-    let currentConnection = placedDots[currentConnectionIndex];
-    if (currentConnection.length > 0) {
-      let lastDot = currentConnection[currentConnection.length - 1];
-      let previewDot = { x: gx, y: gy, size: dotSize };
-
-      let x1 = lastDot.x;
-      let y1 = lastDot.y;
-      let x2 = gx;
-      let y2 = gy;
-
-      let r1 = (lastDot.size * cellSize) / 2;
-      let r2 = (dotSize * cellSize) / 2;
-
-      // Ensure r1 is the larger radius
-      let swap = false;
-      if (r2 > r1) {
-        [r1, r2] = [r2, r1];
-        [x1, x2] = [x2, x1];
-        [y1, y2] = [y2, y1];
-        swap = true;
-      }
-
-      // Calculate the distance between centers
-      let dx = x2 - x1;
-      let dy = y2 - y1;
-      let distance = sqrt(dx * dx + dy * dy);
-
-      // Calculate the angle between centers
-      let angle = atan2(dy, dx);
-
-      // Calculate the angle of the tangent line
-      let tangentAngle = acos((r1 - r2) / distance);
-
-      // Calculate the two tangent angles
-      let angle1 = angle + tangentAngle;
-      let angle2 = angle - tangentAngle;
-
-      // Calculate the tangent points on the larger circle
-      let x1a = x1 + r1 * cos(angle1);
-      let y1a = y1 + r1 * sin(angle1);
-      let x1b = x1 + r1 * cos(angle2);
-      let y1b = y1 + r1 * sin(angle2);
-
-      // Calculate the tangent points on the smaller circle
-      let x2a = x2 + r2 * cos(angle1);
-      let y2a = y2 + r2 * sin(angle1);
-      let x2b = x2 + r2 * cos(angle2);
-      let y2b = y2 + r2 * sin(angle2);
-
-      // Swap points if we swapped the circles
-      if (swap) {
-        [x1a, x2a] = [x2a, x1a];
-        [y1a, y2a] = [y2a, y1a];
-        [x1b, x2b] = [x2b, x1b];
-        [y1b, y2b] = [y2b, y1b];
-      }
-
-      // Draw preview connection with hex color #c1c1c1
-      noFill();
-      stroke("#c1c1c1");
-      strokeWeight(1.5);
-
-      // Draw the circle segments
-      if (swap) {
-        // If preview circle is larger, it should show the longer arc
-        arc(x2, y2, r2 * 2, r2 * 2, angle2, angle1 + TWO_PI);
-        // Existing circle shows shorter arc in opposite direction
-        arc(x1, y1, r1 * 2, r1 * 2, angle1, angle2);
-      } else {
-        // If existing circle is larger, it should show the longer arc
-        arc(x1, y1, r1 * 2, r1 * 2, angle1, angle2 + TWO_PI);
-        // Preview circle shows shorter arc in opposite direction
-        arc(x2, y2, r2 * 2, r2 * 2, angle2, angle1);
-      }
-
-      // Draw linear tangent lines
-      line(x1a, y1a, x2a, y2a);
-      line(x1b, y1b, x2b, y2b);
-    } else {
-      // If no dots are placed yet, show full circle preview
+    if (nextDotStyle === "eraser") {
+      // Draw dotted circle preview for eraser
       noFill();
       stroke("#c1c1c1");
       strokeWeight(1.5);
       let r = dotSize * cellSize;
+      // Draw dotted circle using stroke
+      drawingContext.setLineDash([4, 4]); // Set dash pattern
       ellipse(gx, gy, r);
+      drawingContext.setLineDash([]); // Reset dash pattern
+    } else {
+      // Draw preview tangent lines if there is at least one dot placed
+      let currentConnection = placedDots[currentConnectionIndex];
+      if (currentConnection.length > 0) {
+        let lastDot = currentConnection[currentConnection.length - 1];
+        let previewDot = { x: gx, y: gy, size: dotSize };
+
+        let x1 = lastDot.x;
+        let y1 = lastDot.y;
+        let x2 = gx;
+        let y2 = gy;
+
+        let r1 = (lastDot.size * cellSize) / 2;
+        let r2 = (dotSize * cellSize) / 2;
+
+        // Ensure r1 is the larger radius
+        let swap = false;
+        if (r2 > r1) {
+          [r1, r2] = [r2, r1];
+          [x1, x2] = [x2, x1];
+          [y1, y2] = [y2, y1];
+          swap = true;
+        }
+
+        // Calculate the distance between centers
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        let distance = sqrt(dx * dx + dy * dy);
+
+        // Calculate the angle between centers
+        let angle = atan2(dy, dx);
+
+        // Calculate the angle of the tangent line
+        let tangentAngle = acos((r1 - r2) / distance);
+
+        // Calculate the two tangent angles
+        let angle1 = angle + tangentAngle;
+        let angle2 = angle - tangentAngle;
+
+        // Calculate the tangent points on the larger circle
+        let x1a = x1 + r1 * cos(angle1);
+        let y1a = y1 + r1 * sin(angle1);
+        let x1b = x1 + r1 * cos(angle2);
+        let y1b = y1 + r1 * sin(angle2);
+
+        // Calculate the tangent points on the smaller circle
+        let x2a = x2 + r2 * cos(angle1);
+        let y2a = y2 + r2 * sin(angle1);
+        let x2b = x2 + r2 * cos(angle2);
+        let y2b = y2 + r2 * sin(angle2);
+
+        // Swap points if we swapped the circles
+        if (swap) {
+          [x1a, x2a] = [x2a, x1a];
+          [y1a, y2a] = [y2a, y1a];
+          [x1b, x2b] = [x2b, x1b];
+          [y1b, y2b] = [y2b, y1b];
+        }
+
+        // Draw preview connection with hex color #c1c1c1
+        noFill();
+        stroke("#c1c1c1");
+        strokeWeight(1.5);
+
+        // Draw the circle segments
+        if (swap) {
+          // If preview circle is larger, it should show the longer arc
+          arc(x2, y2, r2 * 2, r2 * 2, angle2, angle1 + TWO_PI);
+          // Existing circle shows shorter arc in opposite direction
+          arc(x1, y1, r1 * 2, r1 * 2, angle1, angle2);
+        } else {
+          // If existing circle is larger, it should show the longer arc
+          arc(x1, y1, r1 * 2, r1 * 2, angle1, angle2 + TWO_PI);
+          // Preview circle shows shorter arc in opposite direction
+          arc(x2, y2, r2 * 2, r2 * 2, angle2, angle1);
+        }
+
+        // Draw linear tangent lines
+        line(x1a, y1a, x2a, y2a);
+        line(x1b, y1b, x2b, y2b);
+      } else {
+        // If no dots are placed yet, show full circle preview
+        noFill();
+        stroke("#c1c1c1");
+        strokeWeight(1.5);
+        let r = dotSize * cellSize;
+        ellipse(gx, gy, r);
+      }
     }
   }
 }
@@ -1168,21 +1336,92 @@ function mousePressed() {
       placedDots.push([]); // Start a new connection
       connectionColors.push([...currentColor]); // Store the current color for this new connection
       connectionDotStyles.push(nextDotStyle); // Store the current dot style for this new connection
-      saveCurrentLetterState(); // Save state after breaking connection
+      saveStateForUndo(); // Save state after breaking connection
     } else {
-      // If this is the first dot of a connection, store the current color
-      if (placedDots[currentConnectionIndex].length === 0) {
-        connectionColors[currentConnectionIndex] = [...currentColor];
+      // Save state before adding any dot
+      saveStateForUndo();
+
+      if (nextDotStyle === "eraser") {
+        // Find and remove dots that are close to the click
+        let foundDot = false;
+        for (let i = placedDots.length - 1; i >= 0; i--) {
+          for (let j = placedDots[i].length - 1; j >= 0; j--) {
+            let dot = placedDots[i][j];
+            let distance = dist(gx, gy, dot.x, dot.y);
+            if (distance < (dot.size * cellSize) / 2) {
+              // If there are dots after the erased dot, create a new connection
+              if (j < placedDots[i].length - 1) {
+                let newConnection = placedDots[i].splice(j + 1);
+                placedDots.splice(i + 1, 0, newConnection);
+                connectionColors.splice(i + 1, 0, [...connectionColors[i]]);
+                connectionDotStyles.splice(i + 1, 0, connectionDotStyles[i]);
+              }
+              // Remove the erased dot
+              placedDots[i].splice(j, 1);
+
+              // If connection is empty, remove it
+              if (placedDots[i].length === 0) {
+                placedDots.splice(i, 1);
+                connectionColors.splice(i, 1);
+                connectionDotStyles.splice(i, 1);
+                if (currentConnectionIndex >= i) {
+                  currentConnectionIndex = Math.max(
+                    0,
+                    currentConnectionIndex - 1
+                  );
+                }
+              }
+
+              // Start a new connection after erasing
+              currentConnectionIndex++;
+              placedDots.push([]);
+              connectionColors.push([...currentColor]);
+              connectionDotStyles.push(nextDotStyle);
+
+              foundDot = true;
+              break;
+            }
+          }
+          if (foundDot) break;
+        }
+      } else {
+        // If this is the first dot of a connection, store the current color
+        if (placedDots[currentConnectionIndex].length === 0) {
+          connectionColors[currentConnectionIndex] = [...currentColor];
+        }
+        placedDots[currentConnectionIndex].push({
+          x: gx,
+          y: gy,
+          size: dotSize,
+          style: nextDotStyle,
+        });
       }
-      placedDots[currentConnectionIndex].push({
-        x: gx,
-        y: gy,
-        size: dotSize,
-        style: nextDotStyle,
-      });
-      saveCurrentLetterState(); // Save state after adding dot
     }
   }
+}
+
+function saveStateForUndo() {
+  // Save the current state for undo
+  let currentState = {
+    placedDots: JSON.parse(JSON.stringify(placedDots)),
+    connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+    connectionDotStyles: [...connectionDotStyles],
+    currentConnectionIndex: currentConnectionIndex,
+  };
+
+  // Push to undo stack
+  undoStack.push(currentState);
+  // Clear redo stack when new action is performed
+  redoStack = [];
+
+  // Update letter drawings
+  letterDrawings[currentLetter] = {
+    placedDots: currentState.placedDots,
+    connectionColors: currentState.connectionColors,
+    connectionDotStyles: currentState.connectionDotStyles,
+  };
+
+  updateLetterButtonIndicator(currentLetter);
 }
 
 function keyPressed() {
@@ -1197,14 +1436,14 @@ function keyPressed() {
     connectionColors = [[...currentColor]];
     connectionDotStyles = [nextDotStyle];
     currentConnectionIndex = 0;
-    saveCurrentLetterState(); // Save state after clearing
+    saveStateForUndo(); // Save state after clearing
     updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
   } else if (key === "n" || key === "N") {
     currentConnectionIndex++;
     placedDots.push([]);
     connectionColors.push([...currentColor]);
     connectionDotStyles.push(nextDotStyle);
-    saveCurrentLetterState(); // Save state after new connection
+    saveStateForUndo(); // Save state after new connection
   } else if (key === "1") {
     dotSize = DOT_SIZES[0]; // S
     updateSizeDisplay();
@@ -1214,43 +1453,46 @@ function keyPressed() {
   } else if (key === "3") {
     dotSize = DOT_SIZES[2]; // L
     updateSizeDisplay();
-  } else if (key === "4") {
-    changeColor(COLORS.red);
-    saveCurrentLetterState(); // Save state after color change
+  } else if (key === "x" || key === "X") {
+    dotSize = DOT_SIZES[3]; // XL
+    updateSizeDisplay();
   } else if (key === "5") {
-    changeColor(COLORS.yellow);
-    saveCurrentLetterState(); // Save state after color change
+    changeColor(COLORS.red);
   } else if (key === "6") {
+    changeColor(COLORS.yellow);
+  } else if (key === "7") {
     changeColor(COLORS.blue);
-    saveCurrentLetterState(); // Save state after color change
   } else if (key === "q" || key === "Q") {
     nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
     updateStyleDisplay();
-    saveCurrentLetterState(); // Save state after style change
+  } else if (key === "e" || key === "E") {
+    nextDotStyle = "eraser";
+    updateStyleDisplay();
   } else if (key === "k" || key === "K") {
     isDarkMode = !isDarkMode;
     document.body.classList.toggle("dark-mode");
   } else if (key === "s" || key === "S") {
     cycleColorPalette();
-    saveCurrentLetterState(); // Save state after palette change
   } else if (key === "p" || key === "P") {
     saveImageWithTimestamp();
   } else if (key === "z" || key === "Z") {
-    // Export 10x10 grid of variations
-    exportGridOfVariations();
+    undo();
+  } else if (key === "y" || key === "Y") {
+    redo();
   }
   return false;
 }
 
 function mouseWheel(event) {
-  // Find the current index in DOT_SIZES
+  // Find the current index in DOT_SIZES (excluding XL)
   let idx = getDotSizeIndex(dotSize);
+  if (idx >= 3) idx = 1; // If XL is selected, default to M
   if (event.delta > 0) {
     // Scroll down, decrease size (to S)
     idx = max(0, idx - 1);
   } else {
     // Scroll up, increase size (to L)
-    idx = min(DOT_SIZES.length - 1, idx + 1);
+    idx = min(2, idx + 1); // Changed from DOT_SIZES.length - 1 to 2
   }
   dotSize = DOT_SIZES[idx];
   updateSizeDisplay();
@@ -1303,146 +1545,6 @@ function saveImageWithTimestamp() {
   saveCanvas("artwork_" + timestamp, "png");
 }
 
-function exportGridOfVariations() {
-  let gridRows = 10;
-  let gridCols = 10;
-  let gutter = 4; // 4px gutter between variations
-  let variationWidth = (width - padding * 2) / gridCols - gutter; // Width of each variation
-  let variationHeight = (height - padding * 2) / gridRows - gutter; // Height of each variation
-
-  // Create a new off-screen graphics buffer for the grid
-  let gridBuffer = createGraphics(
-    (variationWidth + gutter) * gridCols + gutter,
-    (variationHeight + gutter) * gridRows + gutter
-  );
-  gridBuffer.background(245);
-
-  // Generate and draw 10x10 variations with increasing density
-  for (let row = 0; row < gridRows; row++) {
-    for (let col = 0; col < gridCols; col++) {
-      // Calculate density based on grid position (increases from top-left to bottom-right)
-      let density = map(
-        row * gridCols + col,
-        0,
-        gridRows * gridCols - 1,
-        1,
-        100
-      );
-
-      // Generate random connections with the current density
-      generateRandomConnections(density);
-
-      // Draw the variation onto the grid buffer
-      gridBuffer.push();
-      gridBuffer.translate(
-        col * (variationWidth + gutter) + gutter,
-        row * (variationHeight + gutter) + gutter
-      );
-      gridBuffer.scale(
-        variationWidth / (width - padding * 2),
-        variationHeight / (height - padding * 2)
-      );
-      drawGridOnBuffer(gridBuffer);
-      for (let i = 0; i < placedDots.length; i++) {
-        drawConnectionOnBuffer(gridBuffer, placedDots[i], i);
-      }
-      gridBuffer.pop();
-    }
-  }
-
-  // Save the grid as an image
-  let timestamp =
-    year() +
-    "-" +
-    month() +
-    "-" +
-    day() +
-    "_" +
-    hour() +
-    "-" +
-    minute() +
-    "-" +
-    second();
-  gridBuffer.save("grid_variations_" + timestamp + ".png");
-}
-
-function drawGridOnBuffer(buffer) {
-  buffer.stroke(180);
-  buffer.strokeWeight(0.5);
-  for (let i = 0; i <= gridCols; i++) {
-    let pos = i * cellSize + padding;
-    buffer.line(pos, padding, pos, height - padding);
-    buffer.line(padding, pos, width - padding, pos);
-  }
-}
-
-function drawConnectionOnBuffer(buffer, connection, index) {
-  buffer.strokeCap(ROUND);
-  buffer.strokeJoin(ROUND);
-  buffer.noStroke();
-  buffer.stroke(connectionColors[index]); // Use this connection's color
-  buffer.strokeWeight(6);
-  buffer.fill(connectionColors[index]);
-
-  // Draw the tangent lines for the connection
-  for (let i = 0; i < connection.length - 1; i++) {
-    let d1 = connection[i];
-    let d2 = connection[i + 1];
-    drawTangentLinesOnBuffer(buffer, d1, d2, connectionColors[index]);
-  }
-
-  // Draw the dots for the connection
-  buffer.stroke(connectionColors[index]); // Use this connection's color
-  buffer.strokeWeight(6);
-  buffer.fill(255); // Set the fill color to white
-  for (let dot of connection) {
-    drawDotOnBuffer(buffer, dot.x, dot.y, dot.size);
-  }
-}
-
-function drawTangentLinesOnBuffer(buffer, d1, d2, color) {
-  buffer.strokeCap(ROUND);
-  buffer.strokeJoin(ROUND);
-  let x1 = d1.x;
-  let y1 = d1.y;
-  let x2 = d2.x;
-  let y2 = d2.y;
-
-  let r1 = (d1.size * cellSize) / 2;
-  let r2 = (d2.size * cellSize) / 2;
-
-  // Calculate the angle between the two circles
-  let angle = atan2(y2 - y1, x2 - x1);
-  let perpAngle = angle + HALF_PI;
-
-  // Calculate the tangent points
-  let x1a = x1 + cos(perpAngle) * r1;
-  let y1a = y1 + sin(perpAngle) * r1;
-  let x1b = x1 - cos(perpAngle) * r1;
-  let y1b = y1 - sin(perpAngle) * r1;
-
-  let x2a = x2 + cos(perpAngle) * r2;
-  let y2a = y2 + sin(perpAngle) * r2;
-  let x2b = x2 - cos(perpAngle) * r2;
-  let y2b = y2 - sin(perpAngle) * r2;
-
-  // Draw the connection with inward stroke
-  noStroke();
-  fill(color);
-  // Draw linear connecting shape
-  buffer.beginShape();
-  vertex(x1a, y1a);
-  vertex(x2a, y2a);
-  vertex(x2b, y2b);
-  vertex(x1b, y1b);
-  endShape(CLOSE);
-}
-
-function drawDotOnBuffer(buffer, x, y, size) {
-  let r = size * cellSize;
-  buffer.ellipse(x, y, r);
-}
-
 // Helper function to compare arrays
 function arraysEqual(a, b) {
   return a.length === b.length && a.every((val, index) => val === b[index]);
@@ -1490,7 +1592,7 @@ function updateConsole() {
   consolePanel.child(createElement("h3", `Letter ${currentLetter}`));
 
   // Add info for each connection
-  let sizeLabels = ["S", "M", "L"];
+  let sizeLabels = ["S", "M", "L", "XL"]; // Keep XL in console display
   placedDots.forEach((dots, index) => {
     if (dots.length > 0) {
       let connectionDiv = createDiv("");
@@ -1563,7 +1665,7 @@ function getDotSizeIndex(val) {
 
 function updateStyleDisplay() {
   styleButtons.forEach((btn, idx) => {
-    if (["outlined", "filled"][idx] === nextDotStyle) {
+    if (["outlined", "filled", "eraser"][idx] === nextDotStyle) {
       btn.addClass("active");
     } else {
       btn.removeClass("active");
@@ -1632,10 +1734,22 @@ function initializeLetterDrawings() {
 
 function saveCurrentLetterState() {
   // Save the current state for the current letter
-  letterDrawings[currentLetter] = {
+  let currentState = {
     placedDots: JSON.parse(JSON.stringify(placedDots)),
     connectionColors: JSON.parse(JSON.stringify(connectionColors)),
     connectionDotStyles: [...connectionDotStyles],
+    currentConnectionIndex: currentConnectionIndex,
+  };
+
+  // Push to undo stack
+  undoStack.push(currentState);
+  // Clear redo stack when new action is performed
+  redoStack = [];
+
+  letterDrawings[currentLetter] = {
+    placedDots: currentState.placedDots,
+    connectionColors: currentState.connectionColors,
+    connectionDotStyles: currentState.connectionDotStyles,
   };
 
   // Update the indicator for the current letter
@@ -1647,36 +1761,111 @@ function saveCurrentLetterState() {
   }
 }
 
+function undo() {
+  if (undoStack.length > 0) {
+    // Save current state to redo stack
+    let currentState = {
+      placedDots: JSON.parse(JSON.stringify(placedDots)),
+      connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+      connectionDotStyles: [...connectionDotStyles],
+      currentConnectionIndex: currentConnectionIndex,
+    };
+    redoStack.push(currentState);
+
+    // Restore previous state
+    let previousState = undoStack.pop();
+    placedDots = previousState.placedDots;
+    connectionColors = previousState.connectionColors;
+    connectionDotStyles = previousState.connectionDotStyles;
+    currentConnectionIndex = previousState.currentConnectionIndex;
+
+    // Update letter drawings
+    letterDrawings[currentLetter] = {
+      placedDots: placedDots,
+      connectionColors: connectionColors,
+      connectionDotStyles: connectionDotStyles,
+    };
+
+    updateLetterButtonIndicator(currentLetter);
+  }
+}
+
+function redo() {
+  if (redoStack.length > 0) {
+    // Save current state to undo stack
+    let currentState = {
+      placedDots: JSON.parse(JSON.stringify(placedDots)),
+      connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+      connectionDotStyles: [...connectionDotStyles],
+      currentConnectionIndex: currentConnectionIndex,
+    };
+    undoStack.push(currentState);
+
+    // Restore next state
+    let nextState = redoStack.pop();
+    placedDots = nextState.placedDots;
+    connectionColors = nextState.connectionColors;
+    connectionDotStyles = nextState.connectionDotStyles;
+    currentConnectionIndex = nextState.currentConnectionIndex;
+
+    // Update letter drawings
+    letterDrawings[currentLetter] = {
+      placedDots: placedDots,
+      connectionColors: connectionColors,
+      connectionDotStyles: connectionDotStyles,
+    };
+
+    updateLetterButtonIndicator(currentLetter);
+  }
+}
+
 function loadLetterState(letter) {
   let state = letterDrawings[letter];
+
+  // Deep clone the state to avoid reference issues
   placedDots = JSON.parse(JSON.stringify(state.placedDots));
   connectionColors = JSON.parse(JSON.stringify(state.connectionColors));
   connectionDotStyles = [...state.connectionDotStyles];
-  currentConnectionIndex = 0;
 
-  // Update current color to match the first connection's color if it exists
-  if (connectionColors.length > 0 && connectionColors[0].length > 0) {
-    currentColor = [...connectionColors[0]];
-    // Update color button states
-    Object.entries(COLORS).forEach(([name, color]) => {
-      if (arraysEqual(color, currentColor)) {
-        colorButtons[name].addClass("active");
-      } else {
-        colorButtons[name].removeClass("active");
-      }
-    });
-  } else {
-    // If no connections exist, set to default blue
-    currentColor = [...COLORS.blue];
-    // Update color button states
-    Object.entries(COLORS).forEach(([name, color]) => {
-      if (name === "blue") {
-        colorButtons[name].addClass("active");
-      } else {
-        colorButtons[name].removeClass("active");
-      }
-    });
+  // Ensure we have at least one connection array
+  if (placedDots.length === 0) {
+    placedDots = [[]];
+    connectionColors = [[...currentColor]];
+    connectionDotStyles = [nextDotStyle];
   }
+
+  // Set current connection index to the last non-empty connection
+  currentConnectionIndex = placedDots.length - 1;
+  for (let i = placedDots.length - 1; i >= 0; i--) {
+    if (placedDots[i].length > 0) {
+      currentConnectionIndex = i;
+      break;
+    }
+  }
+
+  // Update current color to match the first non-empty connection's color
+  let foundColor = false;
+  for (let i = 0; i < connectionColors.length; i++) {
+    if (placedDots[i].length > 0) {
+      currentColor = [...connectionColors[i]];
+      foundColor = true;
+      break;
+    }
+  }
+
+  // If no connections have colors, set to default blue
+  if (!foundColor) {
+    currentColor = [...COLORS.blue];
+  }
+
+  // Update color button states
+  Object.entries(COLORS).forEach(([name, color]) => {
+    if (arraysEqual(color, currentColor)) {
+      colorButtons[name].addClass("active");
+    } else {
+      colorButtons[name].removeClass("active");
+    }
+  });
 }
 
 function hasLetterDrawing(letter) {
@@ -1700,4 +1889,172 @@ function updateAllLetterIndicators() {
   Object.keys(letterDrawings).forEach((letter) => {
     updateLetterButtonIndicator(letter);
   });
+}
+
+function showHoverPreview(letter, button) {
+  if (!hasLetterDrawing(letter)) {
+    return;
+  }
+
+  // Create a temporary canvas for the preview
+  let previewCanvas = createGraphics(100, 100);
+  previewCanvas.background(255);
+
+  // Save current state
+  let currentState = {
+    placedDots: JSON.parse(JSON.stringify(placedDots)),
+    connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+    connectionDotStyles: [...connectionDotStyles],
+    currentConnectionIndex: currentConnectionIndex,
+  };
+
+  // Load letter state
+  let state = letterDrawings[letter];
+  placedDots = JSON.parse(JSON.stringify(state.placedDots));
+  connectionColors = JSON.parse(JSON.stringify(state.connectionColors));
+  connectionDotStyles = [...state.connectionDotStyles];
+  currentConnectionIndex = 0;
+
+  // Calculate bounds of the design
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  placedDots.forEach((connection) => {
+    connection.forEach((dot) => {
+      // Include the dot radius in bounds calculation
+      let r = dot.size * cellSize;
+      minX = Math.min(minX, dot.x - r / 2);
+      minY = Math.min(minY, dot.y - r / 2);
+      maxX = Math.max(maxX, dot.x + r / 2);
+      maxY = Math.max(maxY, dot.y + r / 2);
+    });
+  });
+
+  // Calculate scale to fit in preview box with padding
+  let designWidth = maxX - minX;
+  let designHeight = maxY - minY;
+  let padding = 15; // Padding around the design
+  let scale =
+    Math.min(
+      (100 - padding * 2) / designWidth,
+      (100 - padding * 2) / designHeight
+    ) * 0.95; // Increased from 0.9 to 0.95 for slightly larger preview
+
+  // Draw the letter on the preview canvas
+  previewCanvas.push();
+  previewCanvas.translate(50, 50);
+  previewCanvas.scale(scale);
+
+  // Draw each connection
+  for (let j = 0; j < placedDots.length; j++) {
+    let connection = placedDots[j];
+    if (connection.length > 0) {
+      // Draw connections
+      for (let k = 0; k < connection.length - 1; k++) {
+        let d1 = connection[k];
+        let d2 = connection[k + 1];
+
+        // Draw tangent lines
+        let x1 = d1.x - (minX + maxX) / 2;
+        let y1 = d1.y - (minY + maxY) / 2;
+        let x2 = d2.x - (minX + maxX) / 2;
+        let y2 = d2.y - (minY + maxY) / 2;
+
+        let r1 = (d1.size * cellSize) / 2;
+        let r2 = (d2.size * cellSize) / 2;
+
+        // Ensure r1 is the larger radius
+        let swap = false;
+        if (r2 > r1) {
+          [r1, r2] = [r2, r1];
+          [x1, x2] = [x2, x1];
+          [y1, y2] = [y2, y1];
+          swap = true;
+        }
+
+        // Calculate the distance between centers
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Calculate the angle between centers
+        let angle = Math.atan2(dy, dx);
+
+        // Calculate the angle of the tangent line
+        let tangentAngle = Math.acos((r1 - r2) / distance);
+
+        // Calculate the two tangent angles
+        let angle1 = angle + tangentAngle;
+        let angle2 = angle - tangentAngle;
+
+        // Calculate the tangent points
+        let x1a = x1 + r1 * Math.cos(angle1);
+        let y1a = y1 + r1 * Math.sin(angle1);
+        let x1b = x1 + r1 * Math.cos(angle2);
+        let y1b = y1 + r1 * Math.sin(angle2);
+
+        let x2a = x2 + r2 * Math.cos(angle1);
+        let y2a = y2 + r2 * Math.sin(angle1);
+        let x2b = x2 + r2 * Math.cos(angle2);
+        let y2b = y2 + r2 * Math.sin(angle2);
+
+        // Swap points if we swapped the circles
+        if (swap) {
+          [x1a, x2a] = [x2a, x1a];
+          [y1a, y2a] = [y2a, y1a];
+          [x1b, x2b] = [x2b, x1b];
+          [y1b, y2b] = [y2b, y1b];
+        }
+
+        // Draw the connection
+        previewCanvas.noStroke();
+        previewCanvas.fill(connectionColors[j]);
+        previewCanvas.beginShape();
+        previewCanvas.vertex(x1a, y1a);
+        previewCanvas.vertex(x2a, y2a);
+        previewCanvas.vertex(x2b, y2b);
+        previewCanvas.vertex(x1b, y1b);
+        previewCanvas.endShape(previewCanvas.CLOSE);
+      }
+
+      // Draw dots
+      for (let dot of connection) {
+        let x = dot.x - (minX + maxX) / 2;
+        let y = dot.y - (minY + maxY) / 2;
+        let r = dot.size * cellSize;
+
+        previewCanvas.noStroke();
+        previewCanvas.fill(connectionColors[j]);
+        previewCanvas.ellipse(x, y, r);
+
+        if (dot.style === "outlined") {
+          previewCanvas.fill(255);
+          previewCanvas.ellipse(x, y, r - 16);
+        }
+      }
+    }
+  }
+  previewCanvas.pop();
+
+  // Convert canvas to data URL
+  let previewImage = previewCanvas.canvas.toDataURL();
+
+  // Update preview div
+  hoverPreviewDiv.html(`<img src="${previewImage}" width="100" height="100">`);
+  hoverPreviewDiv.style("display", "block");
+
+  // Position the preview
+  let buttonRect = button.elt.getBoundingClientRect();
+  hoverPreviewDiv.position(buttonRect.right + 10, buttonRect.top);
+
+  // Restore previous state
+  placedDots = currentState.placedDots;
+  connectionColors = currentState.connectionColors;
+  connectionDotStyles = currentState.connectionDotStyles;
+  currentConnectionIndex = currentState.currentConnectionIndex;
+}
+
+function hideHoverPreview() {
+  hoverPreviewDiv.style("display", "none");
 }

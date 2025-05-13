@@ -179,13 +179,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .control-button:hover {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
 }
 
 .control-button.active {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
 }
 
 .size-control {
@@ -230,7 +228,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .size-button:hover, .size-button:focus {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
   z-index: 1;
 }
 
@@ -394,7 +391,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .help-button:hover, .help-button:focus {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
   transition: all 0.3s ease;
 }
 
@@ -494,7 +490,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .action-button:hover, .action-button:focus {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
   z-index: 1;
 }
 
@@ -532,17 +527,18 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .style-button:hover, .style-button:focus {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
   z-index: 1;
 }
 
 .style-button.active, .style-button.active:hover, .style-button.active:focus {
   background: #0066ff !important;
   color: #fff !important;
-  border: 1.5px solid #0066ff !important;
   z-index: 2;
   box-shadow: 0 2px 8px rgba(0,102,255,0.10);
 }
+
+
+
 
 /* Add dark mode styles */
 body.dark-mode {
@@ -564,7 +560,7 @@ body.dark-mode .size-button:hover,
 body.dark-mode .style-button:hover {
   background: #fff;
   color: #1a1a1a;
-  border: 1.5px solid #fff;
+
 }
 
 body.dark-mode .control-button.active,
@@ -573,7 +569,7 @@ body.dark-mode .size-button.active,
 body.dark-mode .style-button.active {
   background: #fff;
   color: #1a1a1a;
-  border: 1.5px solid #fff;
+
 }
 
 body.dark-mode .console-panel {
@@ -595,7 +591,7 @@ body.dark-mode .help-button {
 body.dark-mode .help-button:hover {
   background: #fff;
   color: #1a1a1a;
-  border: 1.5px solid #fff;
+
 }
 
 body.dark-mode .shortcuts-info {
@@ -614,6 +610,27 @@ body.dark-mode .export-button {
 
 body.dark-mode .export-button:hover {
   background: rgba(255, 255, 255, 0.9);
+}
+
+body.dark-mode .size-button.active,
+body.dark-mode .size-button.active:hover,
+body.dark-mode .size-button.active:focus,
+body.dark-mode .style-button.active,
+body.dark-mode .style-button.active:hover,
+body.dark-mode .style-button.active:focus {
+  background: #fff !important;
+  color: #1a1a1a !important;
+  border: 1.5px solid #fff !important;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+
+body.dark-mode .color-button {
+  border: 2px solid #1a1a1a;
+}
+body.dark-mode .color-button:hover,
+body.dark-mode .color-button.active {
+  border: 2px solid #fff;
 }
 
 .letter-selector {
@@ -655,13 +672,13 @@ body.dark-mode .export-button:hover {
 .letter-button:hover {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
+ 
 }
 
 .letter-button.active {
   background: #0066ff;
   color: #fff;
-  border: 1.5px solid #0066ff;
+
 }
 
 .letter-button::after {
@@ -701,7 +718,7 @@ body.dark-mode .letter-button:hover,
 body.dark-mode .letter-button.active {
   background: #fff;
   color: #1a1a1a;
-  border: 1.5px solid #fff;
+
 }
 
 body.dark-mode .letter-button::after {
