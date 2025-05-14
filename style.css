@@ -263,7 +263,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   box-sizing: border-box;
   scrollbar-width: none;  /* Firefox */
   -ms-overflow-style: none;  /* IE and Edge */
-  margin-bottom: 55px; /* Gap between console and export button */
+  margin-bottom: 85px; /* Gap between console and export button */
 }
 
 .console-panel::-webkit-scrollbar {

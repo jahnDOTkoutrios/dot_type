@@ -465,6 +465,44 @@ function exportZipWithSVGAndLog() {
   });
 }
 
+// Converts a paper.js Path or CompoundPath to an opentype.js Path
+function paperPathToOpenTypePath(paperPath) {
+  const otPath = new opentype.Path();
+  function addSegments(path) {
+    let segments = path.segments;
+    if (!segments || segments.length === 0) return;
+    otPath.moveTo(segments[0].point.x, segments[0].point.y);
+    for (let i = 1; i < segments.length; i++) {
+      let prev = segments[i - 1];
+      let curr = segments[i];
+      // Cubic Bezier if handles exist
+      if (
+        (prev.handleOut &&
+          (prev.handleOut.x !== 0 || prev.handleOut.y !== 0)) ||
+        (curr.handleIn && (curr.handleIn.x !== 0 || curr.handleIn.y !== 0))
+      ) {
+        otPath.curveTo(
+          prev.point.x + (prev.handleOut ? prev.handleOut.x : 0),
+          prev.point.y + (prev.handleOut ? prev.handleOut.y : 0),
+          curr.point.x + (curr.handleIn ? curr.handleIn.x : 0),
+          curr.point.y + (curr.handleIn ? curr.handleIn.y : 0),
+          curr.point.x,
+          curr.point.y
+        );
+      } else {
+        otPath.lineTo(curr.point.x, curr.point.y);
+      }
+    }
+    if (path.closed) otPath.close();
+  }
+  if (paperPath.className === "CompoundPath") {
+    paperPath.children.forEach((child) => addSegments(child));
+  } else {
+    addSegments(paperPath);
+  }
+  return otPath;
+}
+
 function exportAsOTF() {
   // Create an array to store all glyphs
   let glyphs = [];
@@ -485,7 +523,8 @@ function exportAsOTF() {
     path: notdefPath,
   });
   glyphs.push(notdefGlyph);
-  // Convert each letter's dots to a path
+
+  // Convert each letter's booleaned SVG to a path
   Object.entries(letterDrawings).forEach(([letter, state]) => {
     if (state.placedDots.some((connection) => connection.length > 0)) {
       // Save current state
@@ -502,124 +541,72 @@ function exportAsOTF() {
       connectionDotStyles = [...state.connectionDotStyles];
       currentConnectionIndex = 0;
 
-      // Create path for this letter
-      let path = new opentype.Path();
-
-      // Convert dots and their connections to paths
-      placedDots.forEach((connection) => {
-        // Draw connections between dots
-        for (let i = 0; i < connection.length - 1; i++) {
-          let d1 = connection[i];
-          let d2 = connection[i + 1];
-
-          // Convert coordinates to font space (0-1000)
-          let x1 = map(d1.x, padding, width - padding, 100, 900);
-          let y1 = map(d1.y, padding, height - padding, 900, 100) - 122; // Invert y mapping and subtract 122
-          let x2 = map(d2.x, padding, width - padding, 100, 900);
-          let y2 = map(d2.y, padding, height - padding, 900, 100) - 122; // Invert y mapping and subtract 122
-
-          let r1 = map(d1.size * cellSize, 0, cellSize * 2, 20, 100);
-          let r2 = map(d2.size * cellSize, 0, cellSize * 2, 20, 100);
-
-          // Ensure r1 is the larger radius
-          let swap = false;
-          if (r2 > r1) {
-            [r1, r2] = [r2, r1];
-            [x1, x2] = [x2, x1];
-            [y1, y2] = [y2, y1];
-            swap = true;
-          }
-
-          // Calculate the distance between centers
-          let dx = x2 - x1;
-          let dy = y2 - y1;
-          let distance = Math.sqrt(dx * dx + dy * dy);
-
-          // Calculate the angle between centers
-          let angle = Math.atan2(dy, dx);
-
-          // Calculate the angle of the tangent line
-          let tangentAngle = Math.acos((r1 - r2) / distance);
-
-          // Calculate the two tangent angles
-          let angle1 = angle + tangentAngle;
-          let angle2 = angle - tangentAngle;
-
-          // Calculate the tangent points on the larger circle
-          let x1a = x1 + r1 * Math.cos(angle1);
-          let y1a = y1 + r1 * Math.sin(angle1);
-          let x1b = x1 + r1 * Math.cos(angle2);
-          let y1b = y1 + r1 * Math.sin(angle2);
-
-          // Calculate the tangent points on the smaller circle
-          let x2a = x2 + r2 * Math.cos(angle1);
-          let y2a = y2 + r2 * Math.sin(angle1);
-          let x2b = x2 + r2 * Math.cos(angle2);
-          let y2b = y2 + r2 * Math.sin(angle2);
-
-          // Swap points if we swapped the circles
-          if (swap) {
-            [x1a, x2a] = [x2a, x1a];
-            [y1a, y2a] = [y2a, y1a];
-            [x1b, x2b] = [x2b, x1b];
-            [y1b, y2b] = [y2b, y1b];
-          }
-
-          // Draw the connection shape clockwise
-          path.moveTo(x1a, y1a);
-          path.lineTo(x2a, y2a);
-          path.lineTo(x2b, y2b);
-          path.lineTo(x1b, y1b);
-          path.closePath();
+      // Generate SVG and boolean result
+      let svgContent = generateSVG();
+      let { outerPath, innerCircles } = getBooleanResultFromSVG(svgContent);
+      if (!outerPath) {
+        placedDots = currentState.placedDots;
+        connectionColors = currentState.connectionColors;
+        connectionDotStyles = currentState.connectionDotStyles;
+        currentConnectionIndex = currentState.currentConnectionIndex;
+        return;
+      }
+      // Scale and translate the path to fit font em box (0-1000)
+      let scale = 800 / 740;
+      // Group outer and inner paths for consistent transform
+      let allPaths = [outerPath, ...innerCircles];
+      let group = new paper.Group(allPaths);
+      group.scale(scale, -scale);
+      // Use bounds of the group for translation
+      let bounds = group.bounds;
+      let dx = 100 - bounds.left;
+      let dy = 0 - bounds.top;
+      group.translate(new paper.Point(dx, dy));
+      // Extract transformed paths
+      let transformedOuter = group.children[0];
+      let transformedInners = group.children.slice(1);
+      // Convert to opentype.js Path
+      let otPath = paperPathToOpenTypePath(transformedOuter);
+      transformedInners.forEach((circle) => {
+        // Get the original center and a point on the circumference before transform
+        let origCenter = circle.position;
+        let origRadius = circle.bounds.width / 2;
+        // Transform the center using the group's matrix
+        let transformedCenter = group.localToGlobal(origCenter);
+        // Transform a point on the circumference (to get the radius after scaling)
+        let origEdge = origCenter.add([origRadius, 0]);
+        let transformedEdge = group.localToGlobal(origEdge);
+        let transformedRadius = Math.abs(
+          transformedEdge.x - transformedCenter.x
+        );
+        // Clamp minimum radius and log suspicious values
+        const minRadius = 0.5;
+        if (transformedRadius < minRadius) {
+          console.warn(
+            "Small inner circle radius:",
+            transformedRadius,
+            "at",
+            transformedCenter
+          );
+          transformedRadius = minRadius;
         }
-
-        // Draw the dots (only outer circles)
-        connection.forEach((dot) => {
-          // Convert coordinates to font space (0-1000)
-          let x = map(dot.x, padding, width - padding, 100, 900);
-          let y = map(dot.y, padding, height - padding, 900, 100) - 122; // Invert y mapping and subtract 122
-          let radius = map(dot.size * cellSize, 0, cellSize * 2, 20, 100);
-
-          // Create circle using Bézier curves
-          // The magic number 0.552284749831 is used to create a perfect circle with Bézier curves
-          const c = 0.552284749831;
-
-          // Draw outer circle counter-clockwise starting from top
-          path.moveTo(x, y - radius);
-          path.bezierCurveTo(
-            x - radius * c,
-            y - radius,
-            x - radius,
-            y - radius * c,
-            x - radius,
-            y
+        if (transformedRadius < 0) {
+          console.error(
+            "Negative inner circle radius:",
+            transformedRadius,
+            "at",
+            transformedCenter
           );
-          path.bezierCurveTo(
-            x - radius,
-            y + radius * c,
-            x - radius * c,
-            y + radius,
-            x,
-            y + radius
-          );
-          path.bezierCurveTo(
-            x + radius * c,
-            y + radius,
-            x + radius,
-            y + radius * c,
-            x + radius,
-            y
-          );
-          path.bezierCurveTo(
-            x + radius,
-            y - radius * c,
-            x + radius * c,
-            y - radius,
-            x,
-            y - radius
-          );
-          path.closePath();
-        });
+          transformedRadius = minRadius;
+        }
+        // Use high precision
+        transformedRadius = Number(transformedRadius);
+        addClockwiseCircleToPath(
+          otPath,
+          transformedCenter.x,
+          transformedCenter.y,
+          transformedRadius
+        );
       });
 
       // Create the glyph
@@ -627,9 +614,8 @@ function exportAsOTF() {
         name: letter,
         unicode: letter.charCodeAt(0),
         advanceWidth: 1000,
-        path: path,
+        path: otPath,
       });
-
       glyphs.push(glyph);
 
       // Restore previous state
@@ -852,7 +838,7 @@ function setup() {
 
   // Add shortcuts
   const shortcuts = [
-    ["n", "New connection"],
+    ["Space", "New connection"],
     ["c", "Clear all"],
     ["1/2/3", "Dot size S/M/L"],
     ["4/5/6", "Colors"],
@@ -964,9 +950,9 @@ function setup() {
   actionControl.style("width", "120px");
 
   // New (N)
-  let newButton = createButton("N");
+  let newButton = createButton("+");
   newButton.class("action-button");
-  newButton.attribute("title", "New connection (N)");
+  newButton.attribute("title", "New connection (Space)");
   newButton.mousePressed(() => {
     currentConnectionIndex++;
     placedDots.push([]);
@@ -999,21 +985,32 @@ function setup() {
 
   controlButtonsContainer.child(actionControl);
 
-  // Create export buttons container
+  // Create console panel
+  consolePanel = createDiv("");
+  consolePanel.class("console-panel");
+
+  // Create export buttons container (place after console panel in DOM)
   let exportButtons = createDiv("");
   exportButtons.class("export-buttons");
+  exportButtons.style("gap", "8px"); // Match other button gaps
 
-  // Create a single export button for SVG and Log
-  let exportComboButton = createButton("EXPORT");
-  exportComboButton.class("control-button");
-  exportComboButton.mousePressed(exportZipWithSVGAndLog);
-  exportButtons.child(exportComboButton);
+  // Create export SVG button
+  let exportSVGButton = createButton("EXPORT SVG");
+  exportSVGButton.class("control-button");
+  exportSVGButton.mousePressed(exportZipWithSVGAndLog);
+  exportButtons.child(exportSVGButton);
 
-  // Create OTF export button
-  // let exportOTFButton = createButton("EXPORT OTF");
-  // exportOTFButton.class("control-button");
-  // exportOTFButton.mousePressed(exportAsOTF);
-  // exportButtons.child(exportOTFButton);
+  // Create export OTF button
+  let exportOTFButton = createButton("EXPORT OTF");
+  exportOTFButton.class("control-button");
+  exportOTFButton.mousePressed(exportAsOTF);
+  exportButtons.child(exportOTFButton);
+
+  // DEBUG SVG button for boolean operation testing (commented out)
+  // let debugSVGButton = createButton("DEBUG SVG");
+  // debugSVGButton.class("control-button");
+  // debugSVGButton.mousePressed(downloadDebugSVG);
+  // exportButtons.child(debugSVGButton);
 
   // Create letter selector container
   let letterSelector = createDiv("");
@@ -1160,10 +1157,6 @@ function setup() {
   updateGridSize();
   noFill();
 
-  // Create console panel
-  consolePanel = createDiv("");
-  consolePanel.class("console-panel");
-
   updateSizeDisplay(); // Ensure UI is in sync on load
 }
 
@@ -1266,7 +1259,7 @@ function drawGrid() {
   noStroke();
   fill(isDarkMode ? 200 : 0);
   let yOffset = getGridYOffset();
-  let dotRadius = cellSize * 0.16; // Slightly larger dot
+  let dotRadius = cellSize * 0.16;
   for (let i = 0; i < gridCols; i++) {
     for (let j = 0; j < gridRows; j++) {
       let x = i * cellSize + padding + cellSize / 2;
@@ -1330,16 +1323,16 @@ function drawTangentLines(d1, d2, color) {
   let angle2 = angle - tangentAngle;
 
   // Calculate the tangent points on the larger circle
-  let x1a = x1 + r1 * cos(angle1);
-  let y1a = y1 + r1 * sin(angle1);
-  let x1b = x1 + r1 * cos(angle2);
-  let y1b = y1 + r1 * sin(angle2);
+  let x1a = x1 + r1 * Math.cos(angle1);
+  let y1a = y1 + r1 * Math.sin(angle1);
+  let x1b = x1 + r1 * Math.cos(angle2);
+  let y1b = y1 + r1 * Math.sin(angle2);
 
   // Calculate the tangent points on the smaller circle
-  let x2a = x2 + r2 * cos(angle1);
-  let y2a = y2 + r2 * sin(angle1);
-  let x2b = x2 + r2 * cos(angle2);
-  let y2b = y2 + r2 * sin(angle2);
+  let x2a = x2 + r2 * Math.cos(angle1);
+  let y2a = y2 + r2 * Math.sin(angle1);
+  let x2b = x2 + r2 * Math.cos(angle2);
+  let y2b = y2 + r2 * Math.sin(angle2);
 
   // Swap points if we swapped the circles
   if (swap) {
@@ -1593,12 +1586,7 @@ function saveStateForUndo() {
 }
 
 function keyPressed() {
-  // If text input is focused, don't process any hotkeys
-  if (isTextInputFocused) {
-    return false;
-  }
-
-  // Handle arrow keys for grid navigation
+  // Restore arrow key navigation for letters
   if (keyCode === LEFT_ARROW) {
     navigateGrid(-1, 0);
     return false;
@@ -1612,103 +1600,63 @@ function keyPressed() {
     navigateGrid(0, 1);
     return false;
   }
-
-  // Process other hotkeys only when text input is not focused
-  if (keyIsDown(SHIFT)) {
-    // Handle shift + letter/number/punctuation hotkeys
-    let letter = key.toUpperCase();
-
-    // Map shifted number keys to their actual numbers (Swiss keyboard layout)
-    const shiftedNumberMap = {
-      "+": "1",
-      '"': "2",
-      "*": "3",
-      ç: "4",
-      "%": "5",
-      "&": "6",
-      "/": "7",
-      "(": "8",
-      ")": "9",
-      "=": "0",
-    };
-
-    // Check if it's a valid character (A-Z, 0-9, or punctuation)
-    let validKey =
-      /^[A-Z.,?!&–]$/.test(letter) ||
-      (key >= "0" && key <= "9") || // Handle number keys directly
-      Object.keys(shiftedNumberMap).includes(key); // Handle shifted number keys
-
-    if (validKey) {
-      // For shifted numbers, convert to actual number
-      let selectedChar = shiftedNumberMap[key] || letter;
-      saveCurrentLetterState();
-      currentLetter = selectedChar;
-      loadLetterState(selectedChar);
-      letterButtons.forEach((b) => b.removeClass("active"));
-      let btn = select(
-        `#letter-${selectedChar.replace(/[^a-zA-Z0-9]/g, "\\$&")}`
-      );
-      if (btn) btn.addClass("active");
-    }
-  } else {
-    // Only process other hotkeys when shift is not pressed
-    if (key === "C" || key === "c") {
-      placedDots = [[]];
-      connectionColors = [[...currentColor]];
-      connectionDotStyles = [nextDotStyle];
-      currentConnectionIndex = 0;
-      saveStateForUndo(); // Save state after clearing
-      updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
-    } else if (key === "n" || key === "N") {
-      currentConnectionIndex++;
-      placedDots.push([]);
-      connectionColors.push([...currentColor]);
-      connectionDotStyles.push(nextDotStyle);
-      saveStateForUndo(); // Save state after new connection
-    } else if (key === "1") {
-      dotSize = DOT_SIZES[0]; // S
-      updateSizeDisplay();
-    } else if (key === "2") {
-      dotSize = DOT_SIZES[1]; // M
-      updateSizeDisplay();
-    } else if (key === "3") {
-      dotSize = DOT_SIZES[2]; // L
-      updateSizeDisplay();
-    } else if (key === "x" || key === "X") {
-      dotSize = DOT_SIZES[3]; // XL
-      updateSizeDisplay();
-    } else if (key === "5") {
-      changeColor(COLORS.red);
-    } else if (key === "6") {
-      changeColor(COLORS.yellow);
-    } else if (key === "7") {
-      changeColor(COLORS.blue);
-    } else if (key === "8") {
-      randomizeAllColors();
-    } else if (key === "q" || key === "Q") {
-      nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
-      updateStyleDisplay();
-    } else if (key === "e" || key === "E") {
-      nextDotStyle = "eraser";
-      updateStyleDisplay();
-    } else if (key === "k" || key === "K") {
-      isDarkMode = !isDarkMode;
-      document.body.classList.toggle("dark-mode");
-    } else if (key === "s" || key === "S") {
-      cycleColorPalette();
-    } else if (key === "p" || key === "P") {
-      saveImageWithTimestamp();
-    } else if (key === "z" || key === "Z") {
-      undo();
-    } else if (key === "y" || key === "Y") {
-      redo();
-    } else if (key === "o" || key === "O") {
-      exportAsOTF();
-    } else if (key === "r" || key === "R") {
-      generateRandomDesignsForAllLetters(false); // Generate with filled dots
-    } else if (key === "t" || key === "T") {
-      generateRandomDesignsForAllLetters(true); // Generate with outlined dots
-    }
+  // Prevent default behavior for all keys
+  if (keyCode === 32) {
+    // Spacebar
+    currentConnectionIndex++;
+    placedDots.push([]);
+    connectionColors.push([...currentColor]);
+    connectionDotStyles.push(nextDotStyle);
+    saveStateForUndo(); // Save state after new connection
+  } else if (key === "C" || key === "c") {
+    placedDots = [[]];
+    connectionColors = [[...currentColor]];
+    connectionDotStyles = [nextDotStyle];
+    currentConnectionIndex = 0;
+    saveStateForUndo(); // Save state after clearing
+    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
+  } else if (key === "1") {
+    dotSize = DOT_SIZES[0]; // S
+    updateSizeDisplay();
+  } else if (key === "2") {
+    dotSize = DOT_SIZES[1]; // M
+    updateSizeDisplay();
+  } else if (key === "3") {
+    dotSize = DOT_SIZES[2]; // L
+    updateSizeDisplay();
+  } else if (key === "x" || key === "X") {
+    dotSize = DOT_SIZES[3]; // XL
+    updateSizeDisplay();
+  } else if (key === "5") {
+    changeColor(COLORS.red);
+  } else if (key === "6") {
+    changeColor(COLORS.yellow);
+  } else if (key === "7") {
+    changeColor(COLORS.blue);
+  } else if (key === "8") {
+    randomizeAllColors();
+  } else if (key === "q" || key === "Q") {
+    nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
+  } else if (key === "e" || key === "E") {
+    nextDotStyle = "eraser";
+    updateStyleDisplay();
+  } else if (key === "k" || key === "K") {
+    isDarkMode = !isDarkMode;
+    document.body.classList.toggle("dark-mode");
+  } else if (key === "s" || key === "S") {
+    cycleColorPalette();
+  } else if (key === "p" || key === "P") {
+    saveImageWithTimestamp();
+  } else if (key === "z" || key === "Z") {
+    undo();
+  } else if (key === "y" || key === "Y") {
+    redo();
+  } else if (key === "o" || key === "O") {
+    exportAsOTF();
+  } else if (key === "r" || key === "R") {
+    generateRandomDesignsForAllLetters(false); // Generate with filled dots
+  } else if (key === "t" || key === "T") {
+    generateRandomDesignsForAllLetters(true); // Generate with outlined dots
   }
   return false;
 }
@@ -2433,4 +2381,184 @@ function randomizeAllColors() {
 
   // Update letter indicators
   updateAllLetterIndicators();
+}
+
+// Helper to recursively collect all Path and Shape objects from a group, with logging
+function collectShapes(item, shapesArr, innerArr) {
+  if (item.className === "Group" || item.className === "CompoundPath") {
+    if (item.children) {
+      item.children.forEach((child) =>
+        collectShapes(child, shapesArr, innerArr)
+      );
+    }
+  } else {
+    // Log everything
+    console.log("Item:", {
+      className: item.className,
+      type: item.type,
+      fillColor:
+        item.fillColor && item.fillColor.toCSS && item.fillColor.toCSS(),
+      red: item.fillColor && item.fillColor.red,
+      green: item.fillColor && item.fillColor.green,
+      blue: item.fillColor && item.fillColor.blue,
+      pathData: item.pathData || undefined,
+      bounds: item.bounds && item.bounds.toString(),
+    });
+    if (item.className === "Path") {
+      // Check if it's a white-filled circle path
+      let fill = item.fillColor;
+      let isWhite = false;
+      if (fill) {
+        if (fill.toCSS) {
+          let css = fill.toCSS().toLowerCase();
+          isWhite =
+            css === "#fff" ||
+            css === "#ffffff" ||
+            css === "white" ||
+            css === "rgb(255,255,255)";
+        }
+        if (fill.red === 1 && fill.green === 1 && fill.blue === 1) {
+          isWhite = true;
+        }
+      }
+      // Heuristic: if it's a closed path with only 4-8 segments, it might be a circle
+      if (
+        isWhite &&
+        item.closed &&
+        item.segments &&
+        item.segments.length <= 8
+      ) {
+        console.log(
+          "Detected INNER CIRCLE PATH",
+          item.bounds && item.bounds.toString()
+        );
+        innerArr.push(item);
+      } else {
+        shapesArr.push(item);
+      }
+    } else if (item.className === "Shape" && item.type === "circle") {
+      let fill = item.fillColor;
+      let isWhite = false;
+      if (fill) {
+        if (fill.toCSS) {
+          let css = fill.toCSS().toLowerCase();
+          isWhite =
+            css === "#fff" ||
+            css === "#ffffff" ||
+            css === "white" ||
+            css === "rgb(255,255,255)";
+        }
+        if (fill.red === 1 && fill.green === 1 && fill.blue === 1) {
+          isWhite = true;
+        }
+      }
+      let path = item.toPath();
+      if (isWhite) {
+        console.log(
+          "Collected INNER CIRCLE (white)",
+          path.bounds && path.bounds.toString()
+        );
+        innerArr.push(path);
+      } else {
+        console.log(
+          "Collected OUTER CIRCLE",
+          path.bounds && path.bounds.toString()
+        );
+        shapesArr.push(path);
+      }
+    }
+  }
+}
+
+// New: Boolean ops as a reusable function
+// Now returns { outerPath, innerCircles } for use in font export
+function getBooleanResultFromSVG(svgContent) {
+  let canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 800;
+  paper.setup(canvas);
+
+  let resultObj = { outerPath: null, innerCircles: [] };
+  paper.project.importSVG(svgContent, {
+    expandShapes: true,
+    onLoad: function (item) {
+      let designGroup = item.children["design"];
+      if (!designGroup) {
+        resultObj.outerPath = null;
+        resultObj.innerCircles = [];
+        return;
+      }
+      let shapes = [];
+      let innerCircles = [];
+      collectShapes(designGroup, shapes, innerCircles);
+      if (shapes.length === 0) {
+        resultObj.outerPath = null;
+        resultObj.innerCircles = [];
+        return;
+      }
+      // Union all tangent/outer shapes one by one
+      let result = shapes[0].clone();
+      for (let i = 1; i < shapes.length; i++) {
+        result = result.unite(shapes[i]);
+      }
+      resultObj.outerPath = result;
+      resultObj.innerCircles = innerCircles;
+    },
+  });
+  paper.project.clear();
+  return resultObj;
+}
+
+function downloadDebugSVG() {
+  let svgContent = generateSVG();
+  let canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 800;
+  canvas.style.display = "none";
+  document.body.appendChild(canvas);
+
+  paper.setup(canvas);
+
+  // Use the new reusable function
+  let result = getBooleanResultFromSVG(svgContent);
+  if (!result) {
+    alert("No design group or shapes found in SVG.");
+    canvas.remove();
+    return;
+  }
+  paper.project.activeLayer.removeChildren();
+  result && paper.project.activeLayer.addChild(result.outerPath);
+  let debugSVG = paper.project.exportSVG({ asString: true });
+  let blob = new Blob([debugSVG], { type: "image/svg+xml" });
+  let url = URL.createObjectURL(blob);
+  let link = document.createElement("a");
+  link.href = url;
+  link.download = `debug_letter_${currentLetter}.svg`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  canvas.remove();
+  paper.project.clear();
+}
+
+// Helper: Add a clockwise circle to an opentype.js Path (for inner cutouts)
+function roundTo(val, decimals = 4) {
+  return Math.round(val * Math.pow(10, decimals)) / Math.pow(10, decimals);
+}
+
+function addClockwiseCircleToPath(otPath, cx, cy, r) {
+  // Most precise value for circle approximation with cubic Béziers
+  const c = 0.5522847498307936;
+  // Round all coordinates for font export precision
+  cx = roundTo(cx);
+  cy = roundTo(cy);
+  r = roundTo(r);
+  const rc = roundTo(r * c);
+  otPath.moveTo(cx, cy - r);
+  otPath.bezierCurveTo(cx + rc, cy - r, cx + r, cy - rc, cx + r, cy);
+  otPath.bezierCurveTo(cx + r, cy + rc, cx + rc, cy + r, cx, cy + r);
+  otPath.bezierCurveTo(cx - rc, cy + r, cx - r, cy + rc, cx - r, cy);
+  otPath.bezierCurveTo(cx - r, cy - rc, cx - rc, cy - r, cx, cy - r);
+  otPath.close();
 }
