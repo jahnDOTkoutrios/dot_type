@@ -1,30 +1,33 @@
 # Dot Type
 
-A creative coding project that allows you to create beautiful dot-based artwork with connected dots. Built with p5.js, this interactive tool lets you create, manipulate, and export dot-based designs with various connection styles and colors.
+A creative coding project that allows you to create beautiful dot-based typography and artwork. Built with p5.js, this interactive tool lets you design, manipulate, and export dot-based letters and fonts with various connection styles and colors.
 
 ## Features
 
 - **Interactive Dot Placement**: Click to place dots on a grid
 - **Multiple Connection Styles**:
-  - Linear connections
-  - Curved connections
+  - Linear connections with tangent lines
+  - Outlined and filled dot styles
 - **Color Options**:
-  - Red
-  - Green
-  - Black
-  - Blue
+  - Multiple color palettes (RGB, Pastel, Neon, Muted, Warm, Cool, Earth, Ocean)
+  - Custom color selection
 - **Dot Size Control**:
-  - Adjustable dot sizes
+  - Four dot sizes (S, M, L, XL)
   - Mouse wheel support for quick size changes
 - **Grid System**:
-  - Adjustable grid size (5x5 to 30x30)
+  - 5x5 grid for precise letter design
   - Visual grid overlay
 - **Multiple Connections**:
   - Create multiple independent dot connections
   - Each connection can have its own style and color
+- **Letter Management**:
+  - Design individual letters (A-Z, 0-9, punctuation)
+  - Preview text with designed letters
+  - Hover previews for each letter
 - **Export Options**:
-  - PNG export
-  - Console log export (for data analysis)
+  - SVG export with individual letter files
+  - OTF font export
+  - Console log export for data analysis
 
 ## Controls
 
@@ -33,37 +36,50 @@ A creative coding project that allows you to create beautiful dot-based artwork 
 - **Left Click**: Place dots
 - **Middle Click**: Break current connection and start a new one
 - **Mouse Wheel**: Adjust dot size
+- **Hover**: Preview letter designs
 
 ### Keyboard Shortcuts
 
-- `n`: Start a new connection
-- `g`: Toggle between curved and linear connections
-- `c`: Clear all connections
-- `w/s`: Increase/decrease dot size
-- `1-4`: Quick color selection
-  - `1`: Red
-  - `2`: Green
-  - `3`: Black
-  - `4`: Blue
-- `p`: Export as PNG
-- `z`: Generate and export a 10x10 grid of variations
-- `r`: Generate random connections
+- **Space**: Start a new connection
+- **C**: Clear all connections
+- **1/2/3**: Quick dot size selection (S/M/L)
+- **4/5/6**: Quick color selection
+- **Q**: Toggle dot style (outlined/filled)
+- **K**: Toggle dark mode
+- **S**: Cycle through color palettes
+- **P**: Export as PNG
+- **Z**: Undo
+- **Y**: Redo
+- **O**: Export as OTF
+- **R**: Generate random designs (filled)
+- **T**: Generate random designs (outlined)
+- **Arrow Keys**: Navigate between letters
 
 ### UI Controls
 
-- Grid size slider
 - Color selection buttons
-- Size adjustment controls
-- Export buttons
-- Connection style toggle
+- Size adjustment controls (S/M/L)
+- Style controls (outlined/filled/eraser)
+- Action buttons (new/undo/clear)
+- Letter selector
+- Text preview input
+- Export buttons (SVG/OTF)
 
 ## Export Options
 
-### PNG Export
+### SVG Export
 
-- Saves the current artwork as a PNG file
+- Exports individual SVG files for each designed letter
+- Includes a combined grid view
+- Preserves all visual elements and connections
+- Includes timestamp in filenames
+
+### OTF Export
+
+- Generates a complete OpenType font file
+- Includes all designed letters
+- Optimized for font rendering
 - Includes timestamp in filename
-- Preserves all visual elements including grid
 
 ### Console Log Export
 
@@ -77,13 +93,15 @@ Built using:
 
 - p5.js for creative coding
 - HTML5 Canvas for rendering
+- Paper.js for SVG processing
+- OpenType.js for font generation
 - Modern JavaScript features
 
 ## Getting Started
 
 1. Clone the repository
 2. Open `index.html` in a modern web browser
-3. Start creating your dot-based artwork!
+3. Start designing your dot-based typography!
 
 ## License
 
