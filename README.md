@@ -40,20 +40,30 @@ A creative coding project that allows you to create beautiful dot-based typograp
 
 ### Keyboard Shortcuts
 
+#### Main Controls
+
 - **Space**: Start a new connection
 - **C**: Clear all connections
 - **1/2/3**: Quick dot size selection (S/M/L)
-- **4/5/6**: Quick color selection
-- **Q**: Toggle dot style (outlined/filled)
-- **K**: Toggle dark mode
+- **5/6/7**: Quick color selection (Red/Yellow/Blue)
+- **A**: Filled dots
+- **B**: Outlined dots
+- **E**: Eraser tool
+- **Shift+Q**: Clear current design (with confirmation)
+- **Shift+C**: Clear all saved drawings (with confirmation)
+- **Shift+R**: Generate random designs (filled)
+- **Shift+T**: Generate random designs (outlined)
+- **Arrow Keys**: Navigate between letters
+
+#### Hidden Controls
+
+- **4**: Black color (hidden)
+- **8**: Randomize all colors
 - **S**: Cycle through color palettes
 - **P**: Export as PNG
 - **Z**: Undo
 - **Y**: Redo
 - **O**: Export as OTF
-- **R**: Generate random designs (filled)
-- **T**: Generate random designs (outlined)
-- **Arrow Keys**: Navigate between letters
 
 ### UI Controls
 

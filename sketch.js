@@ -2619,6 +2619,23 @@ function clearCurrentDesign() {
     connectionDotStyles = [nextDotStyle];
     currentConnectionIndex = 0;
     saveStateForUndo(); // Save state after clearing
-    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
+
+    // Clear all letters from letterDrawings
+    Object.keys(letterDrawings).forEach((letter) => {
+      letterDrawings[letter] = {
+        placedDots: [[]],
+        connectionColors: [[...currentColor]],
+        connectionDotStyles: [nextDotStyle],
+      };
+      // Update all letter indicators
+      updateLetterButtonIndicator(letter);
+    });
+
+    // Save to localStorage
+    try {
+      localStorage.setItem("dotTypeDrawings", JSON.stringify(letterDrawings));
+    } catch (e) {
+      console.error("Error saving drawings to localStorage:", e);
+    }
   }
 }
