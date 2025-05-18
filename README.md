@@ -43,14 +43,13 @@ A creative coding project that allows you to create beautiful dot-based typograp
 #### Main Controls
 
 - **Space**: Start a new connection
-- **C**: Clear all connections
+- **C**: Clear current letter
 - **1/2/3**: Quick dot size selection (S/M/L)
 - **5/6/7**: Quick color selection (Red/Yellow/Blue)
 - **A**: Filled dots
 - **B**: Outlined dots
 - **E**: Eraser tool
-- **Shift+Q**: Clear current design (with confirmation)
-- **Shift+C**: Clear all saved drawings (with confirmation)
+- **Shift+Q**: Clear all designs (with confirmation)
 - **Shift+R**: Generate random designs (filled)
 - **Shift+T**: Generate random designs (outlined)
 - **Arrow Keys**: Navigate between letters

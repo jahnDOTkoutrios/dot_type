@@ -1664,8 +1664,6 @@ function keyPressed() {
     generateRandomDesignsForAllLetters(false); // Generate with filled dots
   } else if ((key === "t" || key === "T") && keyIsDown(SHIFT)) {
     generateRandomDesignsForAllLetters(true); // Generate with outlined dots
-  } else if ((key === "c" || key === "C") && keyIsDown(SHIFT)) {
-    clearSavedDrawings();
   } else if (key === "4") {
     changeColor([0, 0, 0]); // Black color
   }
