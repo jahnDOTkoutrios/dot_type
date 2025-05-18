@@ -838,13 +838,14 @@ function setup() {
 
   // Add shortcuts
   const shortcuts = [
+    ["B", "Outlined dots"],
+    ["A", "Filled dots"],
+    ["E", "Eraser"],
     ["Space", "New connection"],
     ["c", "Clear all"],
     ["1/2/3", "Dot size S/M/L"],
-    ["4/5/6", "Colors"],
-    ["q", "Toggle dot style"],
-    ["k", "Toggle dark mode"],
-    ["MMB", "Break connection"],
+    ["5/6/7", "Colors"],
+    ["Shift+Q", "Clear current design"],
   ];
 
   shortcuts.forEach(([key, desc]) => {
@@ -1615,6 +1616,8 @@ function keyPressed() {
     currentConnectionIndex = 0;
     saveStateForUndo(); // Save state after clearing
     updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
+  } else if ((key === "q" || key === "Q") && keyIsDown(SHIFT)) {
+    clearCurrentDesign();
   } else if (key === "1") {
     dotSize = DOT_SIZES[0]; // S
     updateSizeDisplay();
@@ -1635,8 +1638,12 @@ function keyPressed() {
     changeColor(COLORS.blue);
   } else if (key === "8") {
     randomizeAllColors();
-  } else if (key === "q" || key === "Q") {
-    nextDotStyle = nextDotStyle === "filled" ? "outlined" : "filled";
+  } else if (key === "a" || key === "A") {
+    nextDotStyle = "filled";
+    updateStyleDisplay();
+  } else if (key === "b" || key === "B") {
+    nextDotStyle = "outlined";
+    updateStyleDisplay();
   } else if (key === "e" || key === "E") {
     nextDotStyle = "eraser";
     updateStyleDisplay();
@@ -1653,10 +1660,14 @@ function keyPressed() {
     redo();
   } else if (key === "o" || key === "O") {
     exportAsOTF();
-  } else if (key === "r" || key === "R") {
+  } else if ((key === "r" || key === "R") && keyIsDown(SHIFT)) {
     generateRandomDesignsForAllLetters(false); // Generate with filled dots
-  } else if (key === "t" || key === "T") {
+  } else if ((key === "t" || key === "T") && keyIsDown(SHIFT)) {
     generateRandomDesignsForAllLetters(true); // Generate with outlined dots
+  } else if ((key === "c" || key === "C") && keyIsDown(SHIFT)) {
+    clearSavedDrawings();
+  } else if (key === "4") {
+    changeColor([0, 0, 0]); // Black color
   }
   return false;
 }
@@ -1882,6 +1893,20 @@ function cycleColorPalette() {
 }
 
 function initializeLetterDrawings() {
+  // Try to load saved drawings from localStorage
+  let savedDrawings = localStorage.getItem("dotTypeDrawings");
+  if (savedDrawings) {
+    try {
+      letterDrawings = JSON.parse(savedDrawings);
+      // Update all letter indicators
+      updateAllLetterIndicators();
+      return;
+    } catch (e) {
+      console.error("Error loading saved drawings:", e);
+    }
+  }
+
+  // If no saved drawings or error, initialize empty drawings
   // Initialize A-Z
   for (let i = 0; i < 26; i++) {
     let letter = String.fromCharCode(65 + i);
@@ -1930,12 +1955,32 @@ function saveCurrentLetterState() {
     connectionDotStyles: currentState.connectionDotStyles,
   };
 
+  // Save to localStorage
+  try {
+    localStorage.setItem("dotTypeDrawings", JSON.stringify(letterDrawings));
+  } catch (e) {
+    console.error("Error saving drawings to localStorage:", e);
+  }
+
   // Update the indicator for the current letter
   updateLetterButtonIndicator(currentLetter);
 
   // Force preview update if this letter is in the preview text
   if (previewText && previewText.includes(currentLetter)) {
     previewText = previewText; // This will trigger the input event
+  }
+}
+
+// Add a function to clear saved drawings
+function clearSavedDrawings() {
+  if (
+    confirm(
+      "Are you sure you want to clear all saved drawings? This cannot be undone."
+    )
+  ) {
+    localStorage.removeItem("dotTypeDrawings");
+    initializeLetterDrawings();
+    loadLetterState(currentLetter);
   }
 }
 
@@ -2561,4 +2606,19 @@ function addClockwiseCircleToPath(otPath, cx, cy, r) {
   otPath.bezierCurveTo(cx - rc, cy + r, cx - r, cy + rc, cx - r, cy);
   otPath.bezierCurveTo(cx - r, cy - rc, cx - rc, cy - r, cx, cy - r);
   otPath.close();
+}
+
+function clearCurrentDesign() {
+  if (
+    confirm(
+      "Are you sure you want to clear the current design? This cannot be undone."
+    )
+  ) {
+    placedDots = [[]];
+    connectionColors = [[...currentColor]];
+    connectionDotStyles = [nextDotStyle];
+    currentConnectionIndex = 0;
+    saveStateForUndo(); // Save state after clearing
+    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
+  }
 }
