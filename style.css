@@ -355,7 +355,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   opacity: 0;
   transform: translateX(-20px);
   pointer-events: none;
-  transition: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
   text-transform: uppercase;
 }
 
@@ -363,7 +363,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
-  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .help-button {
@@ -537,9 +536,6 @@ input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: 0 2px 8px rgba(0,102,255,0.10);
 }
 
-
-
-
 /* Add dark mode styles */
 body.dark-mode {
   background: #1a1a1a;
@@ -560,7 +556,6 @@ body.dark-mode .size-button:hover,
 body.dark-mode .style-button:hover {
   background: #fff;
   color: #1a1a1a;
-
 }
 
 body.dark-mode .control-button.active,
@@ -569,7 +564,6 @@ body.dark-mode .size-button.active,
 body.dark-mode .style-button.active {
   background: #fff;
   color: #1a1a1a;
-
 }
 
 body.dark-mode .console-panel {
@@ -591,7 +585,6 @@ body.dark-mode .help-button {
 body.dark-mode .help-button:hover {
   background: #fff;
   color: #1a1a1a;
-
 }
 
 body.dark-mode .shortcuts-info {
@@ -672,13 +665,11 @@ body.dark-mode .color-button.active {
 .letter-button:hover {
   background: #0066ff;
   color: #fff;
- 
 }
 
 .letter-button.active {
   background: #0066ff;
   color: #fff;
-
 }
 
 .letter-button::after {
@@ -718,7 +709,6 @@ body.dark-mode .letter-button:hover,
 body.dark-mode .letter-button.active {
   background: #fff;
   color: #1a1a1a;
-
 }
 
 body.dark-mode .letter-button::after {
@@ -793,4 +783,8 @@ body.dark-mode .text-preview:focus {
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+}
+
+.shortcuts-info.no-animate {
+  transition: none !important;
 }

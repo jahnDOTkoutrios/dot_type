@@ -834,7 +834,7 @@ function setup() {
 
   // Create shortcuts info (hidden by default)
   let shortcutsInfo = createDiv("");
-  shortcutsInfo.class("shortcuts-info");
+  shortcutsInfo.class("shortcuts-info no-animate");
 
   // Add shortcuts
   const shortcuts = [
@@ -842,10 +842,10 @@ function setup() {
     ["A", "Filled dots"],
     ["E", "Eraser"],
     ["Space", "New connection"],
-    ["c", "Clear all"],
+    ["C", "Clear"],
     ["1/2/3", "Dot size S/M/L"],
     ["5/6/7", "Colors"],
-    ["Shift+Q", "Clear current design"],
+    ["Shift+Q", "Clear all"],
   ];
 
   shortcuts.forEach(([key, desc]) => {
@@ -974,14 +974,7 @@ function setup() {
   let clearButton = createButton("×");
   clearButton.class("action-button");
   clearButton.attribute("title", "Clear (C)");
-  clearButton.mousePressed(() => {
-    placedDots = [[]];
-    connectionColors = [[...currentColor]];
-    connectionDotStyles = [nextDotStyle];
-    currentConnectionIndex = 0;
-    saveStateForUndo(); // Save state after clearing
-    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
-  });
+  clearButton.mousePressed(clearAll);
   actionControl.child(clearButton);
 
   controlButtonsContainer.child(actionControl);
@@ -1159,6 +1152,11 @@ function setup() {
   noFill();
 
   updateSizeDisplay(); // Ensure UI is in sync on load
+
+  // After adding all shortcuts and help button, remove the no-animate class after the first frame
+  setTimeout(() => {
+    shortcutsInfo.removeClass("no-animate");
+  }, 0);
 }
 
 function updateGridSize() {
@@ -1589,33 +1587,67 @@ function saveStateForUndo() {
 function keyPressed() {
   // Restore arrow key navigation for letters
   if (keyCode === LEFT_ARROW) {
-    navigateGrid(-1, 0);
-    return false;
+    if (currentGridX > 0) {
+      currentGridX--;
+    } else if (currentGridY > 0) {
+      currentGridX = 2;
+      currentGridY--;
+    }
+    currentLetter = gridPositionToLetter(currentGridX, currentGridY);
+    loadLetterState(currentLetter);
+    // Update UI
+    letterButtons.forEach((b) => b.removeClass("active"));
+    let btn = select(
+      `#letter-${currentLetter.replace(/[^a-zA-Z0-9]/g, "\\$&")}`
+    );
+    if (btn) btn.addClass("active");
   } else if (keyCode === RIGHT_ARROW) {
-    navigateGrid(1, 0);
-    return false;
+    if (currentGridX < 2) {
+      currentGridX++;
+    } else if (currentGridY < 13) {
+      currentGridX = 0;
+      currentGridY++;
+    }
+    currentLetter = gridPositionToLetter(currentGridX, currentGridY);
+    loadLetterState(currentLetter);
+    // Update UI
+    letterButtons.forEach((b) => b.removeClass("active"));
+    let btn = select(
+      `#letter-${currentLetter.replace(/[^a-zA-Z0-9]/g, "\\$&")}`
+    );
+    if (btn) btn.addClass("active");
   } else if (keyCode === UP_ARROW) {
-    navigateGrid(0, -1);
-    return false;
+    if (currentGridY > 0) {
+      currentGridY--;
+      currentLetter = gridPositionToLetter(currentGridX, currentGridY);
+      loadLetterState(currentLetter);
+      // Update UI
+      letterButtons.forEach((b) => b.removeClass("active"));
+      let btn = select(
+        `#letter-${currentLetter.replace(/[^a-zA-Z0-9]/g, "\\$&")}`
+      );
+      if (btn) btn.addClass("active");
+    }
   } else if (keyCode === DOWN_ARROW) {
-    navigateGrid(0, 1);
-    return false;
-  }
-  // Prevent default behavior for all keys
-  if (keyCode === 32) {
-    // Spacebar
-    currentConnectionIndex++;
+    if (currentGridY < 13) {
+      currentGridY++;
+      currentLetter = gridPositionToLetter(currentGridX, currentGridY);
+      loadLetterState(currentLetter);
+      // Update UI
+      letterButtons.forEach((b) => b.removeClass("active"));
+      let btn = select(
+        `#letter-${currentLetter.replace(/[^a-zA-Z0-9]/g, "\\$&")}`
+      );
+      if (btn) btn.addClass("active");
+    }
+  } else if (key === " ") {
+    // Start a new connection
     placedDots.push([]);
     connectionColors.push([...currentColor]);
     connectionDotStyles.push(nextDotStyle);
-    saveStateForUndo(); // Save state after new connection
-  } else if (key === "C" || key === "c") {
-    placedDots = [[]];
-    connectionColors = [[...currentColor]];
-    connectionDotStyles = [nextDotStyle];
-    currentConnectionIndex = 0;
-    saveStateForUndo(); // Save state after clearing
-    updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
+    currentConnectionIndex = placedDots.length - 1;
+  } else if (key === "c" || key === "C") {
+    clearAll();
   } else if ((key === "q" || key === "Q") && keyIsDown(SHIFT)) {
     clearCurrentDesign();
   } else if (key === "1") {
@@ -1666,8 +1698,61 @@ function keyPressed() {
     generateRandomDesignsForAllLetters(true); // Generate with outlined dots
   } else if (key === "4") {
     changeColor([0, 0, 0]); // Black color
+  } else if (keyIsDown(SHIFT)) {
+    // Handle Shift + color keys for Swiss keyboard
+    if (key === "ç" || key === "Ç") {
+      changeAllLettersColor([0, 0, 0]); // Black color
+    } else if (key === "%") {
+      changeAllLettersColor(COLORS.red);
+    } else if (key === "&") {
+      changeAllLettersColor(COLORS.yellow);
+    } else if (key === "/") {
+      changeAllLettersColor(COLORS.blue);
+    }
   }
   return false;
+}
+
+// Add new function to change color of all letters
+function changeAllLettersColor(color) {
+  // Save current state for undo
+  let currentState = {
+    placedDots: JSON.parse(JSON.stringify(placedDots)),
+    connectionColors: JSON.parse(JSON.stringify(connectionColors)),
+    connectionDotStyles: [...connectionDotStyles],
+    currentConnectionIndex: currentConnectionIndex,
+  };
+  undoStack.push(currentState);
+  redoStack = [];
+
+  // Change colors for all letters
+  Object.keys(letterDrawings).forEach((letter) => {
+    let state = letterDrawings[letter];
+    if (state && state.placedDots.some((connection) => connection.length > 0)) {
+      // Update all connection colors for this letter
+      state.connectionColors = state.connectionColors.map(() => [...color]);
+    }
+  });
+
+  // Update current letter's colors
+  if (placedDots.some((connection) => connection.length > 0)) {
+    connectionColors = connectionColors.map(() => [...color]);
+  }
+
+  // Update current color
+  currentColor = [...color];
+
+  // Update color button states
+  Object.entries(COLORS).forEach(([name, col]) => {
+    if (arraysEqual(col, currentColor)) {
+      colorButtons[name].addClass("active");
+    } else {
+      colorButtons[name].removeClass("active");
+    }
+  });
+
+  // Update letter indicators
+  updateAllLetterIndicators();
 }
 
 function mouseWheel(event) {
@@ -2636,4 +2721,13 @@ function clearCurrentDesign() {
       console.error("Error saving drawings to localStorage:", e);
     }
   }
+}
+
+function clearAll() {
+  placedDots = [[]];
+  connectionColors = [[...currentColor]];
+  connectionDotStyles = [nextDotStyle];
+  currentConnectionIndex = 0;
+  saveStateForUndo(); // Save state after clearing
+  updateLetterButtonIndicator(currentLetter); // Update indicator after clearing
 }
