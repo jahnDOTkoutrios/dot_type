@@ -701,34 +701,8 @@ function generateSVG() {
   let width = 740; // canvasSize (700) + gridPadding*2 (20*2)
   let height = 740; // canvasSize (700) + gridPadding*2 (20*2)
 
-  // Calculate bounds of the design
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  placedDots.forEach((connection) => {
-    connection.forEach((dot) => {
-      minX = Math.min(minX, dot.x);
-      minY = Math.min(minY, dot.y);
-      maxX = Math.max(maxX, dot.x);
-      maxY = Math.max(maxY, dot.y);
-    });
-  });
-
-  // If no dots, use default bounds
-  if (!isFinite(minX)) {
-    minX = minY = 0;
-    maxX = maxY = 1;
-  }
-
   // Use a fixed scale based on the canvas size
   let scale = 1; // Keep scale at 1 since we're using the exact size
-
-  // Calculate offset to center the design
-  let designWidth = maxX - minX;
-  let designHeight = maxY - minY;
-  let offsetX = (width - designWidth * scale) / 2 - minX * scale;
-  let offsetY = (height - designHeight * scale) / 2 - minY * scale;
 
   // Start SVG content
   let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
@@ -747,11 +721,11 @@ function generateSVG() {
     isDarkMode ? "#232323" : "#fafafa"
   }"/>`;
 
-  // Draw the dot grid
+  // Draw the dot grid - using 5x5 grid to match drawing area
   let dotRadius = cellSize * 0.16 * scale;
   let yOffset = getGridYOffset() * scale;
-  for (let i = 0; i < gridCols; i++) {
-    for (let j = 0; j < gridRows; j++) {
+  for (let i = 0; i < 5; i++) {
+    for (let j = 0; j < 5; j++) {
       let x = i * cellSize * scale + gridX + (cellSize * scale) / 2;
       let y = j * cellSize * scale + gridY + (cellSize * scale) / 2;
       svg += `<circle cx="${x}" cy="${y}" r="${dotRadius}" fill="${
@@ -774,10 +748,13 @@ function generateSVG() {
         let d1 = connection[i];
         let d2 = connection[i + 1];
         let color = connectionColors[index];
-        let x1 = d1.x * scale + offsetX;
-        let y1 = d1.y * scale + offsetY;
-        let x2 = d2.x * scale + offsetX;
-        let y2 = d2.y * scale + offsetY;
+
+        // Convert drawing coordinates to SVG coordinates
+        let x1 = d1.x - padding + gridX;
+        let y1 = d1.y - getGridYOffset() + gridY;
+        let x2 = d2.x - padding + gridX;
+        let y2 = d2.y - getGridYOffset() + gridY;
+
         let r1 = (d1.size * cellSize * scale) / 2;
         let r2 = (d2.size * cellSize * scale) / 2;
         let dx = x2 - x1;
@@ -802,8 +779,9 @@ function generateSVG() {
       // Draw dots
       connection.forEach((dot) => {
         let r = dot.size * cellSize * scale;
-        let x = dot.x * scale + offsetX;
-        let y = dot.y * scale + offsetY;
+        // Convert drawing coordinates to SVG coordinates
+        let x = dot.x - padding + gridX;
+        let y = dot.y - getGridYOffset() + gridY;
         if (dot.style === "filled") {
           svg += `<circle cx="${x}" cy="${y}" r="${
             r / 2
