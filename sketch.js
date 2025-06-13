@@ -1660,7 +1660,7 @@ function keyPressed() {
   } else if (key === "k" || key === "K") {
     isDarkMode = !isDarkMode;
     document.body.classList.toggle("dark-mode");
-  } else if (key === "s" || key === "S") {
+  } else if ((key === "s" || key === "S") && keyIsDown(SHIFT)) {
     cycleColorPalette();
   } else if (key === "p" || key === "P") {
     saveImageWithTimestamp();
